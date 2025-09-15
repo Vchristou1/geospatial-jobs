@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Geospatial Jobs</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Job Mapping</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.css"/>
 <script src="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
@@ -11,87 +11,90 @@
 <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  :root { --bg:#0F1115; --panel:#131722; --stroke:#242634; --text:#E7E9EE; --muted:#9AA0AB; --accent:#5563FF;}
+  :root{--bg:#0F1115;--panel:#131722;--stroke:#242634;--text:#E7E9EE;--muted:#9AA0AB;--accent:#5563FF}
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui}
   #map{position:absolute;inset:0}
   .sidebar{position:absolute;left:0;top:0;bottom:0;width:360px;background:var(--panel);border-right:1px solid var(--stroke);z-index:10;overflow:auto}
-  .pill{padding:.5rem .7rem;border:1px solid var(--stroke);border-radius:.7rem;font-size:.8rem;color:var(--muted);cursor:pointer;user-select:none}
-  .pill.active{background:var(--accent);color:#fff;border-color:transparent}
   .card{background:var(--panel);border:1px solid var(--stroke);border-radius:.9rem;padding:1rem;margin:1rem}
-  .legend{display:flex;height:14px;border:1px solid var(--stroke);border-radius:6px;overflow:hidden}
-  .region-btn{background:var(--panel);border:1px solid var(--stroke);color:var(--muted);padding:6px 12px;border-radius:8px;cursor:pointer}
+  .pill{padding:.5rem .7rem;border:1px solid var(--stroke);border-radius:.7rem;font-size:.8rem;color:#cbd5e1;cursor:pointer}
+  .pill.active{background:var(--accent);border-color:transparent;color:white}
+  .btn{background:var(--panel);border:1px solid var(--stroke);padding:.35rem .6rem;border-radius:.5rem;font-size:.8rem;color:var(--text);cursor:pointer}
+  .btn.primary{background:var(--accent);border-color:transparent;color:white}
+  .region-btn{background:var(--panel);border:1px solid var(--stroke);color:#aab1be;padding:6px 12px;border-radius:8px;cursor:pointer}
   .region-btn.active{background:var(--accent);color:#fff}
-
-  /* bottom table drawer */
+  /* Table drawer */
   .drawer{position:fixed;left:0;right:0;bottom:0;height:42vh;background:var(--panel);border-top:1px solid var(--stroke);
-          transform:translateY(0); /* start open */ transition:.25s;z-index:40;pointer-events:auto;display:flex;flex-direction:column}
-  .drawer.closed{transform:translateY(100%);pointer-events:none}
+          transform:translateY(0);transition:.25s;z-index:40;display:flex;flex-direction:column}
+  .drawer.closed{transform:translateY(100%)}
   .drawer header{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.5rem .75rem;border-bottom:1px solid var(--stroke)}
-  .drawer .tools{display:flex;gap:.5rem;align-items:center}
   table{width:100%;border-collapse:collapse;font-size:12px}
   thead th{position:sticky;top:0;background:#0F1115;border-bottom:1px solid var(--stroke);text-align:left;padding:.5rem .6rem}
   tbody td{border-bottom:1px solid var(--stroke);padding:.4rem .6rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   td[contenteditable="true"]{outline:1px dashed transparent}
   td[contenteditable="true"]:focus{outline:1px dashed var(--accent);background:#0c0f18}
-  .btn{background:var(--panel);border:1px solid var(--stroke);padding:.35rem .6rem;border-radius:.5rem;font-size:.8rem;color:var(--text);cursor:pointer}
-  .btn.primary{background:var(--accent);border-color:transparent;color:#fff}
+  /* Popup: dark text */
+  .maplibregl-popup-content{color:#0b1220;font: 13px/1.35 Inter,system-ui,Arial}
+  .legend{display:flex;height:14px;border:1px solid var(--stroke);border-radius:6px;overflow:hidden}
 </style>
 </head>
 <body>
   <aside class="sidebar">
     <div class="card" style="margin-top:1rem">
-      <h1 class="text-xl font-semibold mb-3">Geospatial</h1>
+      <h1 class="text-xl font-semibold mb-3">Job Mapping</h1>
       <div class="flex gap-2">
         <button id="tabMap" class="pill active">Map Visualization</button>
-        <button id="tabEO"  class="pill">Earth Observation jobs</button>
         <button id="tabVE"  class="pill">Vector Enrichment jobs</button>
       </div>
       <div class="mt-3 flex gap-2">
         <button id="toggleTable" class="btn primary">Toggle table (T)</button>
         <button id="addRow" class="btn">Add job row</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="flex items-center justify-between mb-2">
-        <h2 class="font-semibold">Layers</h2>
-        <button id="btnImport" class="bg-indigo-500 text-white text-sm px-3 py-1 rounded-md">Import data</button>
+        <button id="btnImport" class="btn">Import</button>
         <input id="fileInput" type="file" accept=".csv,.geojson,.json" hidden/>
       </div>
-
-      <label class="text-sm text-gray-400">Renderer</label>
-      <select id="renderer" class="w-full bg-transparent border border-[color:var(--stroke)] rounded-md px-2 py-1 mb-3">
-        <option value="clusters" selected>Clusters / Points</option>
-        <option value="heatmap">Heatmap</option>
-        <option value="hexgrid">Hex grid (Vector enrichment)</option>
-      </select>
-
-      <label class="text-sm text-gray-400">Color based on</label>
-      <select id="attr" class="w-full bg-transparent border border-[color:var(--stroke)] rounded-md px-2 py-1 mb-3">
-        <option value="count">count</option>
-        <option value="salary">salary</option>
-        <option value="experience">experience</option>
-      </select>
-
-      <label class="text-sm text-gray-400">Classification</label>
-      <select id="classif" class="w-full bg-transparent border border-[color:var(--stroke)] rounded-md px-2 py-1 mb-3">
-        <option value="quantile" selected>Quantile (Q5)</option>
-        <option value="equal">Equal Interval</option>
-      </select>
-
-      <div class="legend mb-1" id="legend"></div>
-      <div class="flex justify-between text-xs text-gray-400"><span id="lgLow">low</span><span id="lgHigh">high</span></div>
     </div>
 
     <div class="card">
       <h2 class="font-semibold mb-2">Filters</h2>
-      <select id="country" class="w-full bg-transparent border border-[color:var(--stroke)] rounded-md px-2 py-1 mb-2">
-        <option value="">All countries</option>
-        <option value="NL">Netherlands</option><option value="DE">Germany</option>
-        <option value="FR">France</option><option value="BE">Belgium</option><option value="UK">United Kingdom</option>
-      </select>
-      <input id="q" placeholder="Filter by company or job" class="w-full bg-transparent border border-[color:var(--stroke)] rounded-md px-2 py-1"/>
+      <div class="text-xs text-slate-400 mb-1">Country (locked)</div>
+      <input class="w-full bg-transparent border border-[color:var(--stroke)] rounded-md px-2 py-1 mb-3" value="Netherlands (NL)" disabled/>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="text-xs text-slate-400">Salary min</label>
+          <input id="salaryMin" type="number" class="w-full bg-transparent border border-[color:var(--stroke)] rounded-md px-2 py-1" />
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Salary max</label>
+          <input id="salaryMax" type="number" class="w-full bg-transparent border border-[color:var(--stroke)] rounded-md px-2 py-1" />
+        </div>
+      </div>
+      <label class="mt-1 inline-flex items-center gap-2 text-xs"><input id="salaryIncludeEmpty" type="checkbox" class="accent-indigo-500" checked/>Include jobs without salary</label>
+
+      <div class="mt-3">
+        <label class="text-xs text-slate-400">Date posted ≤ (days)</label>
+        <input id="daysSince" type="number" min="0" step="1" class="w-full bg-transparent border border-[color:var(--stroke)] rounded-md px-2 py-1" placeholder="e.g. 5"/>
+      </div>
+
+      <div class="mt-3 text-xs text-slate-400">Job type</div>
+      <div class="grid grid-cols-3 gap-2 text-sm mt-1">
+        <label class="inline-flex items-center gap-2"><input id="jtRemote" type="checkbox" class="accent-indigo-500" checked/>Remote</label>
+        <label class="inline-flex items-center gap-2"><input id="jtHybrid" type="checkbox" class="accent-indigo-500" checked/>Hybrid</label>
+        <label class="inline-flex items-center gap-2"><input id="jtOnsite" type="checkbox" class="accent-indigo-500" checked/>On-site</label>
+      </div>
+
+      <div class="mt-2">
+        <label class="inline-flex items-center gap-2 text-sm"><input id="notApplied" type="checkbox" class="accent-indigo-500"/>Hide jobs with Applied = Yes</label>
+      </div>
+
+      <div class="mt-3">
+        <label class="text-xs text-slate-400">Search (title/company)</label>
+        <input id="q" placeholder="Type to filter…" class="w-full bg-transparent border border-[color:var(--stroke)] rounded-md px-2 py-1"/>
+      </div>
+
+      <div class="mt-3">
+        <div class="legend mb-1" id="legend"></div>
+        <div class="flex justify-between text-xs text-gray-400"><span id="lgLow">low</span><span id="lgHigh">high</span></div>
+      </div>
     </div>
   </aside>
 
@@ -103,18 +106,18 @@
 
   <div id="map"></div>
 
-  <!-- EDITABLE TABLE DRAWER (visible by default) -->
+  <!-- EDITABLE TABLE -->
   <section id="drawer" class="drawer">
     <header>
-      <div class="tools">
+      <div class="flex items-center gap-3">
         <strong>Data table</strong>
-        <label class="text-xs flex items-center gap-1 ml-3">
+        <label class="text-xs flex items-center gap-1">
           <input id="tableFiltered" type="checkbox" class="accent-indigo-500" checked/>
           <span class="text-gray-400">Use current filters</span>
         </label>
         <span id="rowCount" class="text-gray-400 text-xs"></span>
       </div>
-      <div class="tools">
+      <div class="flex gap-2">
         <button id="exportCsv" class="btn">Export CSV</button>
         <button id="closeDrawer" class="btn">Close</button>
       </div>
@@ -132,181 +135,274 @@ const CONFIG = {
   STYLE: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
   PALETTE: ['#6C1D6B','#9C2C7A','#D4475D','#F07E2E','#FFA600'],
   CLUSTER_RADIUS: 60,
-  CLUSTER_MAX_ZOOM: 14,
-  HEX_KM: 8
+  CLUSTER_MAX_ZOOM: 14
 };
 
 const map = new maplibregl.Map({ container:'map', style:CONFIG.STYLE, center:[5.3,52.2], zoom:6.2 });
 const deckOverlay = new deck.MapboxOverlay({ interleaved:true, layers:[] });
 map.addControl(deckOverlay);
 
+// --- Demo region polygons (very simplified provinces just for aggregation demo)
+const NL_REGIONS = {
+  type:'FeatureCollection', features:[
+    turf.bboxPolygon([3.3,52.2,5.5,53.7], {properties:{name:'Noord-Holland'}}), // rough!
+    turf.bboxPolygon([4.0,51.7,5.8,52.4], {properties:{name:'Utrecht & Zuid-Holland mix'}}),
+    turf.bboxPolygon([5.0,51.2,6.1,51.8], {properties:{name:'Noord-Brabant'}})
+  ]
+};
+
 // UI refs
-const rendererSel = document.getElementById('renderer');
-const attrSel = document.getElementById('attr');
-const classSel = document.getElementById('classif');
-const fileBtn = document.getElementById('btnImport');
-const fileInput = document.getElementById('fileInput');
-const countrySel = document.getElementById('country');
-const qInput = document.getElementById('q');
-const legend = document.getElementById('legend');
-const lgLow = document.getElementById('lgLow'), lgHigh = document.getElementById('lgHigh');
-const drawer = document.getElementById('drawer');
+const tabMap = document.getElementById('tabMap');
+const tabVE  = document.getElementById('tabVE');
 const toggleTableBtn = document.getElementById('toggleTable');
 const closeDrawerBtn = document.getElementById('closeDrawer');
 const addRowBtn = document.getElementById('addRow');
+const fileBtn = document.getElementById('btnImport');
+const fileInput = document.getElementById('fileInput');
+
+const salaryMin = document.getElementById('salaryMin');
+const salaryMax = document.getElementById('salaryMax');
+const salaryIncludeEmpty = document.getElementById('salaryIncludeEmpty');
+const daysSince = document.getElementById('daysSince');
+const jtRemote = document.getElementById('jtRemote');
+const jtHybrid = document.getElementById('jtHybrid');
+const jtOnsite = document.getElementById('jtOnsite');
+const notApplied = document.getElementById('notApplied');
+const qInput = document.getElementById('q');
+
+const legend = document.getElementById('legend');
+const lgLow = document.getElementById('lgLow'), lgHigh = document.getElementById('lgHigh');
+const drawer = document.getElementById('drawer');
 const tableFiltered = document.getElementById('tableFiltered');
 const tblHead = document.getElementById('tbl').querySelector('thead');
 const tblBody = document.getElementById('tbl').querySelector('tbody');
 const rowCount = document.getElementById('rowCount');
 
-let raw=null, filtered=null, breaks=[0,0,0,0], currentRenderer='clusters';
+// Data
+let raw=null, filtered=null, currentRenderer='clusters', salaryRange=[0,0];
 
-// Sample data
+// Sample data (NL only)
 function sampleData(){
   const rows = [
-    {lon:4.8945,lat:52.3667,company:'Leaseweb', job:'SAP Functional Application Manager', country:'NL', count:1, salary:89582, experience:2, type:'Hybrid', date:'2025-03-03'},
-    {lon:4.8945,lat:52.3667,company:'Deloitte',  job:'Junior SAP Consultant', country:'NL', count:1, salary:65754, experience:3, type:'On-site', date:'2025-03-07'},
-    {lon:5.5958,lat:51.5194,company:'Royal Swinkels', job:'Junior SAP Application Manager', country:'NL', count:1, salary:89834, experience:2, type:'On-site', date:'2025-03-02'},
-    {lon:5.1214,lat:52.0907,company:'Billennium', job:'SAP Consultant (Remote)', country:'NL', count:1, salary:68849, experience:3, type:'Remote', date:'2025-03-01'},
-    {lon:5.4697,lat:51.4416,company:'SixteenFifty', job:'SAP MM Support Consultant', country:'NL', count:1, salary:72918, experience:3, type:'Hybrid', date:'2025-03-06'}
+    {lon:4.8945,lat:52.3667,company:'Leaseweb', job:'SAP Functional Application Manager', salary:89582, experience:2, type:'Hybrid', date:'2025-03-03', applied:'No'},
+    {lon:4.8945,lat:52.3667,company:'Deloitte',  job:'Junior SAP Consultant', salary:65754, experience:3, type:'On-site', date:'2025-03-07', applied:'No'},
+    {lon:5.5958,lat:51.5194,company:'Royal Swinkels', job:'Junior SAP Application Manager', salary:89834, experience:2, type:'On-site', date:'2025-03-02', applied:'Yes'},
+    {lon:5.1214,lat:52.0907,company:'Billennium', job:'SAP Consultant (Remote)', salary:68849, experience:3, type:'Remote', date:'2025-03-01', applied:'No'},
+    {lon:5.4697,lat:51.4416,company:'SixteenFifty', job:'SAP MM Support Consultant', salary:72918, experience:3, type:'Hybrid', date:'2025-03-06', applied:'No'}
   ];
   return { type:'FeatureCollection', features: rows.map((r,i)=>({
     type:'Feature',
     geometry:{ type:'Point', coordinates:[r.lon,r.lat] },
-    properties:{ id:i, name:r.job, company:r.company, country:r.country,
-      count:r.count, salary:r.salary, experience:r.experience, type:r.type, date:r.date }
+    properties:{ id:i, country:'NL', name:r.job, company:r.company,
+      salary:r.salary, experience:r.experience, type:r.type, date:r.date, applied:r.applied }
   }))};
 }
 
-// helpers
-const quantiles = (arr,k)=>{ const a=[...arr].sort((x,y)=>x-y), q=[]; for(let i=1;i<k;i++){ const p=i/k, idx=(a.length-1)*p, lo=Math.floor(idx), hi=Math.ceil(idx); q.push(lo===hi?a[lo]:a[lo]+(a[hi]-a[lo])*(idx-lo)); } return q; };
-const equalBreaks=(arr,k)=>{ const mn=Math.min(...arr), mx=Math.max(...arr), step=(mx-mn)/k, b=[]; for(let i=1;i<k;i++) b.push(mn+step*i); return b; };
-function computeBreaks(){
-  const attr = attrSel.value;
-  const vals = (filtered?.features||[]).map(f => +f.properties[attr] || 0);
-  if(!vals.length){ breaks=[0,0,0,0]; return; }
-  breaks = (classSel.value==='equal' ? equalBreaks(vals, CONFIG.PALETTE.length) : quantiles(vals, CONFIG.PALETTE.length));
-  legend.innerHTML = CONFIG.PALETTE.map(c=>`<div style="flex:1;background:${c}"></div>`).join('');
-  lgLow.textContent = Math.round(Math.min(...vals)).toLocaleString();
-  lgHigh.textContent = Math.round(Math.max(...vals)).toLocaleString();
+// Helpers
+const quantiles = (arr,k)=>{ const a=[...arr].sort((x,y)=>x-y), q=[]; if(a.length===0) return q;
+  for(let i=1;i<k;i++){ const p=i/k, idx=(a.length-1)*p, lo=Math.floor(idx), hi=Math.ceil(idx);
+    q.push(lo===hi?a[lo]:a[lo]+(a[hi]-a[lo])*(idx-lo)); } return q; };
+
+function computeSalaryRange(){
+  const vals = raw.features.map(f=>+f.properties.salary).filter(v=>isFinite(v)&&v>0);
+  const min = vals.length?Math.min(...vals):0;
+  const max = vals.length?Math.max(...vals):0;
+  salaryRange=[min,max];
+  salaryMin.value=min||0; salaryMax.value=max||0;
 }
+
+function withinDays(dateStr, maxDays){
+  if(!maxDays || !/^\d+$/.test(String(maxDays))) return true;
+  const d = new Date(dateStr); if(isNaN(+d)) return false;
+  const diffDays = (Date.now() - d.getTime())/(1000*60*60*24);
+  return diffDays <= maxDays + 1e-9;
+}
+
 function applyFilters(){
-  const iso = countrySel.value, q = qInput.value.trim().toLowerCase();
+  const q = qInput.value.trim().toLowerCase();
+  const typesWanted = new Set([jtRemote.checked&&'Remote', jtHybrid.checked&&'Hybrid', jtOnsite.checked&&'On-site'].filter(Boolean));
+  const salMin = Number(salaryMin.value)||0;
+  const salMax = Number(salaryMax.value)||Number.MAX_SAFE_INTEGER;
+  const includeEmpty = salaryIncludeEmpty.checked;
+  const maxDays = daysSince.value?parseInt(daysSince.value,10):null;
+
   filtered = { type:'FeatureCollection', features: (raw?.features||[]).filter(f=>{
-    const ok = !iso || f.properties.country===iso;
+    // country locked to NL
+    if(f.properties.country!=='NL') return false;
+    // text
     const txt = `${f.properties.name} ${f.properties.company}`.toLowerCase();
-    return ok && (!q || txt.includes(q));
+    if(q && !txt.includes(q)) return false;
+    // type
+    if(typesWanted.size && !typesWanted.has(f.properties.type)) return false;
+    // applied
+    if(notApplied.checked && String(f.properties.applied).toLowerCase()==='yes') return false;
+    // salary
+    const s = Number(f.properties.salary);
+    if(isFinite(s) && s>0){
+      if(s<salMin || s>salMax) return false;
+    }else if(!includeEmpty){
+      return false;
+    }
+    // date posted
+    if(!withinDays(f.properties.date, maxDays)) return false;
+
+    return true;
   })};
 }
+
 function fitTo(fc){ if(!fc.features.length) return; const b=turf.bbox(fc); map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:100}); }
 
-// map layers
+// Map sources/layers
 const SRC='jobs', L_CLUSTER='cluster-circles', L_CLUSTER_TXT='cluster-text', L_POINTS='points', L_HEAT='heat';
-function ensureLayers(){
-  if(!map.getSource(SRC)){
-    map.addSource(SRC, {
-      type:'geojson',
-      data:{type:'FeatureCollection', features:[]},
-      cluster:true, clusterRadius:CONFIG.CLUSTER_RADIUS, clusterMaxZoom:CONFIG.CLUSTER_MAX_ZOOM,
-      clusterProperties:{
-        sum_salary: ['+', ['accumulated'], ['to-number',['get','salary']]],
-        sum_experience: ['+', ['accumulated'], ['to-number',['get','experience']]],
-        sum_count: ['+', ['accumulated'], ['to-number',['get','count']]]
-      }
-    });
-    map.addLayer({
-      id:L_CLUSTER, type:'circle', source:SRC, filter:['has','point_count'],
-      paint:{
-        'circle-color': ['step', ['get','point_count'], CONFIG.PALETTE[0], 10, CONFIG.PALETTE[1], 30, CONFIG.PALETTE[2], 70, CONFIG.PALETTE[3], 100, CONFIG.PALETTE[4]],
-        'circle-radius': ['interpolate',['linear'],['get','point_count'],1,14,100,34],
-        'circle-stroke-color':'#0F1115','circle-stroke-width':2,'circle-opacity':0.9
-      }
-    });
-    map.addLayer({ id:L_CLUSTER_TXT, type:'symbol', source:SRC, filter:['has','point_count'],
-      layout:{'text-field':['to-string',['get','point_count']],'text-size':12}, paint:{'text-color':'#fff'} });
-    map.addLayer({
-      id:L_POINTS, type:'circle', source:SRC, filter:['!', ['has','point_count']],
-      paint:{
-        'circle-color': ['step', ['to-number',['get','count']], CONFIG.PALETTE[0], 1, CONFIG.PALETTE[1], 2, CONFIG.PALETTE[2], 3, CONFIG.PALETTE[3], 5, CONFIG.PALETTE[4]],
-        'circle-radius': 7, 'circle-stroke-color':'#0F1115','circle-stroke-width':1.5,'circle-opacity':0.9
-      }
-    });
-    map.addLayer({ id:L_HEAT, type:'heatmap', source:SRC,
-      paint:{ 'heatmap-opacity':0.9,'heatmap-radius':30,'heatmap-intensity':1.1,
-        'heatmap-color': ['interpolate',['linear'],['heatmap-density'],0,'rgba(0,0,0,0)',.3,'#3aa0ff',.6,'#ffd166',.8,'#ff8c42',1,'#ff4d4d'] }});
-    map.setLayoutProperty(L_HEAT,'visibility','none');
 
-    map.on('click', L_CLUSTER, e=>{
-      const f=e.features?.[0]; if(!f) return;
-      map.getSource(SRC).getClusterLeaves(f.properties.cluster_id, Infinity, 0, (err, leaves)=>{
-        if(err||!leaves?.length) return;
-        const fc={type:'FeatureCollection',features:leaves}; const b=turf.bbox(fc);
-        map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:120,maxZoom:18});
-      });
+function ensureLayers(){
+  if(map.getSource(SRC)) return;
+  map.addSource(SRC, {
+    type:'geojson',
+    data:{type:'FeatureCollection',features:[]},
+    cluster:true, clusterRadius:CONFIG.CLUSTER_RADIUS, clusterMaxZoom:CONFIG.CLUSTER_MAX_ZOOM
+  });
+
+  map.addLayer({
+    id:L_CLUSTER, type:'circle', source:SRC, filter:['has','point_count'],
+    paint:{
+      'circle-color': CONFIG.PALETTE[2], // temporary; updated dynamically
+      'circle-radius': ['interpolate',['linear'],['get','point_count'],1,14,100,34],
+      'circle-stroke-color':'#0F1115','circle-stroke-width':2,'circle-opacity':0.95
+    }
+  });
+  map.addLayer({
+    id:L_CLUSTER_TXT, type:'symbol', source:SRC, filter:['has','point_count'],
+    layout:{'text-field':['to-string',['get','point_count']],'text-size':12}, paint:{'text-color':'#fff'}
+  });
+  map.addLayer({
+    id:L_POINTS, type:'circle', source:SRC, filter:['!', ['has','point_count']],
+    paint:{
+      'circle-color':'#a855f7', // fixed magenta point
+      'circle-radius':7,'circle-stroke-color':'#0F1115','circle-stroke-width':1.5,'circle-opacity':0.95
+    }
+  });
+  map.addLayer({
+    id:L_HEAT, type:'heatmap', source:SRC,
+    paint:{
+      'heatmap-opacity':0.9,
+      'heatmap-radius': ['interpolate',['linear'],['zoom'],5,20,9,40],
+      'heatmap-intensity': ['interpolate',['linear'],['zoom'],5,0.8,9,1.2],
+      // pure density → peaks where more jobs are
+      'heatmap-weight': 1,
+      'heatmap-color': ['interpolate',['linear'],['heatmap-density'],
+        0,'rgba(0,0,0,0)', .3,'#3aa0ff', .6,'#ffd166', .8,'#ff8c42', 1,'#ff4d4d']
+    }
+  });
+  map.setLayoutProperty(L_HEAT,'visibility','none');
+
+  // cluster click → zoom so all leaves are visible
+  map.on('click', L_CLUSTER, e=>{
+    const f=e.features?.[0]; if(!f) return;
+    map.getSource(SRC).getClusterLeaves(f.properties.cluster_id, Infinity, 0, (err, leaves)=>{
+      if(err||!leaves?.length) return;
+      const fc={type:'FeatureCollection',features:leaves}; const b=turf.bbox(fc);
+      map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:120,maxZoom:18});
     });
-    map.on('click', L_POINTS, e=>{
-      const f=e.features?.[0]; if(!f) return;
-      const p=f.properties, [lon,lat]=f.geometry.coordinates;
-      new maplibregl.Popup({offset:12}).setLngLat([lon,lat]).setHTML(
-        `<div style="min-width:220px">
-           <div class="font-semibold mb-1">${p.name}</div>
-           <div class="text-xs text-gray-400 mb-1">${p.company}</div>
-           <div class="text-sm">Jobs: <b>${p.count}</b> · Salary: <b>€${(+p.salary||0).toLocaleString()}</b> · Exp: <b>${p.experience}y</b></div>
-           <div class="text-sm">Type: <b>${p.type||''}</b> · Date: <b>${p.date||''}</b></div>
-           <div class="text-[11px] text-gray-400 mt-1">${lat.toFixed(4)}, ${lon.toFixed(4)}</div>
-         </div>`).addTo(map);
-    });
-  }
+  });
+
+  // point click → popup; if other jobs share same coords, show them all
+  map.on('click', L_POINTS, e=>{
+    const f=e.features?.[0]; if(!f) return;
+    const [lon,lat]=f.geometry.coordinates;
+    const same = (raw?.features||[]).filter(x=>{
+      const [xlon,xlat]=x.geometry.coordinates;
+      return Math.abs(xlon-lon)<1e-5 && Math.abs(xlat-lat)<1e-5;
+    }).map(x=>x.properties);
+
+    let html='';
+    if(same.length>1){
+      html = `<div class="font-semibold mb-1">Jobs at this location (${same.length})</div>
+              <table style="width:100%;border-collapse:collapse;font-size:12px">
+                <thead><tr><th style="text-align:left">Title</th><th>Company</th><th>Type</th><th>Salary</th><th>Date</th></tr></thead>
+                <tbody>${same.map(p=>`
+                  <tr>
+                    <td>${p.name}</td><td>${p.company}</td><td>${p.type||''}</td>
+                    <td>${p.salary?('€'+(+p.salary).toLocaleString()):'-'}</td><td>${p.date||''}</td>
+                  </tr>`).join('')}</tbody></table>
+              <div style="color:#6b7280;margin-top:4px;font-size:11px">${lat.toFixed(4)}, ${lon.toFixed(4)}</div>`;
+    }else{
+      const p=f.properties;
+      html = `<div style="min-width:240px">
+        <div class="font-semibold mb-1">${p.name}</div>
+        <div style="color:#6b7280;margin-bottom:4px">${p.company}</div>
+        <div>Salary: <b>${p.salary?('€'+(+p.salary).toLocaleString()):'—'}</b> · Exp: <b>${p.experience||0}y</b></div>
+        <div>Type: <b>${p.type||''}</b> · Date: <b>${p.date||''}</b></div>
+        <div style="color:#6b7280;margin-top:4px;font-size:11px">${lat.toFixed(4)}, ${lon.toFixed(4)}</div>
+      </div>`;
+    }
+    new maplibregl.Popup({offset:12}).setLngLat([lon,lat]).setHTML(html).addTo(map);
+  });
 }
-function updateColors(){
-  const attr = attrSel.value;
-  const pointExpr = ['step',['to-number',['get',attr==='count'?'count':attr]], CONFIG.PALETTE[0],
-    breaks[0], CONFIG.PALETTE[1], breaks[1], CONFIG.PALETTE[2], breaks[2], CONFIG.PALETTE[3], breaks[3], CONFIG.PALETTE[4]];
-  map.setPaintProperty(L_POINTS,'circle-color', pointExpr);
-  // heat weight
-  map.setPaintProperty(L_HEAT,'heatmap-weight', attr==='count' ? 1 : ['interpolate',['linear'],['to-number',['get',attr]], breaks[0],.1, breaks[3],1]);
-  // clusters color by count or averages
-  let clusterValue = ['get','point_count'];
-  if(attr==='salary') clusterValue = ['/', ['get','sum_salary'], ['max',1,['get','point_count']]];
-  if(attr==='experience') clusterValue = ['/', ['get','sum_experience'], ['max',1,['get','point_count']]];
-  map.setPaintProperty(L_CLUSTER,'circle-color', ['step',clusterValue, CONFIG.PALETTE[0], breaks[0],CONFIG.PALETTE[1], breaks[1],CONFIG.PALETTE[2], breaks[2],CONFIG.PALETTE[3], breaks[3],CONFIG.PALETTE[4]]);
+
+// Dynamic cluster color scale based on visible clusters
+function recolorClusters(){
+  const feats = map.queryRenderedFeatures({layers:[L_CLUSTER]});
+  const counts = feats.map(f=>f.properties.point_count).filter(v=>isFinite(v));
+  if(!counts.length) return;
+  const br = quantiles(counts, CONFIG.PALETTE.length); // 4 breaks
+  legend.innerHTML = CONFIG.PALETTE.map(c=>`<div style="flex:1;background:${c}"></div>`).join('');
+  lgLow.textContent = Math.min(...counts); lgHigh.textContent = Math.max(...counts);
+  map.setPaintProperty(L_CLUSTER,'circle-color',
+    ['step',['get','point_count'],
+      CONFIG.PALETTE[0],
+      br[0]??1, CONFIG.PALETTE[1],
+      br[1]??2, CONFIG.PALETTE[2],
+      br[2]??3, CONFIG.PALETTE[3],
+      br[3]??4, CONFIG.PALETTE[4]
+    ]);
 }
+
+// Renderer switching
 function setRenderer(kind){
   currentRenderer = kind;
   const show = (id,vis)=> map.getLayer(id) && map.setLayoutProperty(id,'visibility',vis?'visible':'none');
   if(kind==='clusters'){ show(L_CLUSTER,true); show(L_CLUSTER_TXT,true); show(L_POINTS,true); show(L_HEAT,false); deckOverlay.setProps({layers:[]}); }
   else if(kind==='heatmap'){ show(L_CLUSTER,false); show(L_CLUSTER_TXT,false); show(L_POINTS,false); show(L_HEAT,true); deckOverlay.setProps({layers:[]}); }
-  else { show(L_CLUSTER,false); show(L_CLUSTER_TXT,false); show(L_POINTS,false); show(L_HEAT,false); renderHexGrid(); }
+  else { // region aggregation (vector enrichment)
+    show(L_CLUSTER,false); show(L_CLUSTER_TXT,false); show(L_POINTS,false); show(L_HEAT,false);
+    renderRegionAggregation();
+  }
 }
-function renderHexGrid(){
+
+// Aggregate jobs by regions (demo polygons)
+function renderRegionAggregation(){
   if(!filtered?.features?.length){ deckOverlay.setProps({layers:[]}); return; }
-  const bbox = turf.bbox(filtered);
-  const grid = turf.hexGrid(bbox, CONFIG.HEX_KM, {units:'kilometers'});
-  const pts = turf.featureCollection(filtered.features.map(f=>turf.point(f.geometry.coordinates)));
-  const filled=[];
-  grid.features.forEach(cell=>{
-    const inside = turf.pointsWithinPolygon(pts, cell).features.length;
-    if(inside>0){ cell.properties.count=inside; filled.push(cell); }
-  });
-  const fc=turf.featureCollection(filled);
+  // count per region
+  const counted = NL_REGIONS.features.map(cell=>{
+    const cnt = filtered.features.filter(pt=>turf.booleanPointInPolygon(pt, cell)).length;
+    if(cnt>0) cell.properties.count = cnt;
+    return cnt>0?cell:null;
+  }).filter(Boolean);
+  const fc = {type:'FeatureCollection', features:counted};
   const br = quantiles(fc.features.map(f=>f.properties.count), CONFIG.PALETTE.length);
   const toRGB = h=>{ const x=h.replace('#','');return [parseInt(x.slice(0,2),16),parseInt(x.slice(2,4),16),parseInt(x.slice(4,6),16)];};
+
   const poly = new deck.GeoJsonLayer({
-    id:'hex-polys', data:fc, stroked:false, filled:true, pickable:true, opacity:.85,
-    getFillColor: f=>{ const v=f.properties.count; const i=v<=br[0]?0:v<=br[1]?1:v<=br[2]?2:v<=br[3]?3:4; const [r,g,b]=toRGB(CONFIG.PALETTE[i]); return [r,g,b,220]; }
+    id:'regions', data:fc, stroked:true, filled:true, pickable:true, opacity:.85,
+    getLineColor:[20,24,36,200], getLineWidth:2,
+    getFillColor: f=>{ const v=f.properties.count; const i=v<= (br[0]??v) ?0 : v<= (br[1]??v)?1 : v<= (br[2]??v)?2 : v<= (br[3]??v)?3 : 4;
+      const [r,g,b]=toRGB(CONFIG.PALETTE[i]); return [r,g,b,220];}
   });
   const labels = new deck.TextLayer({
-    id:'hex-labels', data:fc.features.map(f=>({pos:turf.centroid(f).geometry.coordinates, t:String(f.properties.count)})),
-    getPosition:d=>d.pos, getText:d=>d.t, getSize:16, getColor:[255,255,255,255], getTextAnchor:'middle', getAlignmentBaseline:'center'
+    id:'region-labels', data:fc.features.map(f=>({pos:turf.centroid(f).geometry.coordinates, t:`${f.properties.name}: ${f.properties.count}`})),
+    getPosition:d=>d.pos, getText:d=>d.t, getSize:14, getColor:[255,255,255,255], getTextAnchor:'middle', getAlignmentBaseline:'center'
   });
   deckOverlay.setProps({layers:[poly,labels]});
 }
+
+// Refresh map data
 function refresh(){
   applyFilters();
-  computeBreaks();
   map.getSource(SRC)?.setData(filtered);
-  updateColors();
-  if(currentRenderer==='hexgrid') renderHexGrid();
+  if(currentRenderer==='hexgrid' /* not used now */){} 
+  if(currentRenderer==='clusters') recolorClusters();
+  if(currentRenderer==='vector') renderRegionAggregation();
 }
 
 // TABLE ----------
@@ -314,12 +410,11 @@ const COLS = [
   {k:'id', label:'ID', edit:false},
   {k:'name', label:'Title', edit:true},
   {k:'company', label:'Company', edit:true},
-  {k:'country', label:'Country', edit:true},
-  {k:'count', label:'Count', edit:true},
   {k:'salary', label:'Salary', edit:true},
   {k:'experience', label:'Exp', edit:true},
   {k:'type', label:'Type', edit:true},
   {k:'date', label:'Date', edit:true},
+  {k:'applied', label:'Applied', edit:true},
   {k:'lat', label:'Lat', edit:true},
   {k:'lon', label:'Lon', edit:true},
   {k:'_del', label:'', edit:false}
@@ -327,9 +422,8 @@ const COLS = [
 function featureRows(list){
   return list.map(f=>({
     id:f.properties.id, name:f.properties.name||'', company:f.properties.company||'',
-    country:f.properties.country||'', count:+(f.properties.count||1)||1,
     salary:+(f.properties.salary||0)||0, experience:+(f.properties.experience||0)||0,
-    type:f.properties.type||'', date:f.properties.date||'',
+    type:f.properties.type||'', date:f.properties.date||'', applied:f.properties.applied||'No',
     lat:+f.geometry.coordinates[1], lon:+f.geometry.coordinates[0]
   }));
 }
@@ -348,32 +442,26 @@ function renderTable(){
     }).join('')}
   </tr>`).join('');
 
-  // cell edits
+  // edits
   tblBody.querySelectorAll('td[contenteditable="true"]').forEach(td=>{
-    td.addEventListener('blur', e=>{
+    td.addEventListener('blur', ()=>{
       const tr = td.closest('tr'); const id = +tr.dataset.id; const key = td.dataset.key;
       const f = (raw?.features||[]).find(x=>x.properties.id===id); if(!f) return;
       let v = td.textContent.trim();
-      if(['count','salary','experience'].includes(key)){ v = Number(String(v).replace(/[^\d.-]/g,''))||0; f.properties[key]=v; }
-      else if(key==='lat' || key==='lon'){ const num = Number(v); if(isFinite(num)){ const c=f.geometry.coordinates.slice(); f.geometry.coordinates = (key==='lat')?[c[0],num]:[num,c[1]]; } }
-      else { f.properties[key] = v; }
-      refresh();
-      renderTable();
+      if(['salary','experience'].includes(key)){ v = Number(String(v).replace(/[^\d.-]/g,''))||0; f.properties[key]=v; }
+      else if(key==='lat'||key==='lon'){ const num=Number(v); if(isFinite(num)){ const c=f.geometry.coordinates.slice(); f.geometry.coordinates=(key==='lat')?[c[0],num]:[num,c[1]]; } }
+      else if(key==='applied'){ f.properties.applied = (v.toLowerCase().startsWith('y')?'Yes':'No'); }
+      else { f.properties[key]=v; }
+      refresh(); renderTable();
     });
   });
-
   // delete
   tblBody.querySelectorAll('button[data-del]').forEach(btn=>{
-    btn.onclick = ()=>{
-      const id = +btn.dataset.del;
-      raw.features = raw.features.filter(f=>f.properties.id!==id);
-      refresh(); renderTable();
-    };
+    btn.onclick = ()=>{ const id=+btn.dataset.del; raw.features = raw.features.filter(f=>f.properties.id!==id); refresh(); renderTable(); };
   });
-
-  // row click -> flyTo
+  // click row → fly
   tblBody.querySelectorAll('tr').forEach(tr=>{
-    tr.addEventListener('click', (e)=>{
+    tr.addEventListener('click', e=>{
       if(e.target.closest('button')) return;
       if(e.target.getAttribute('contenteditable')==='true') return;
       const id=+tr.dataset.id; const f=(raw?.features||[]).find(x=>x.properties.id===id); if(f) map.flyTo({center:f.geometry.coordinates, zoom:10});
@@ -381,45 +469,31 @@ function renderTable(){
   });
 }
 
-// add row
-addRowBtn.onclick = ()=>{
-  if(!raw) raw={type:'FeatureCollection',features:[]};
-  const nextId = (raw.features.reduce((m,f)=>Math.max(m, +f.properties.id||0), -1) + 1);
-  const center = map.getCenter();
-  raw.features.push({
-    type:'Feature',
-    geometry:{type:'Point', coordinates:[center.lng, center.lat]},
-    properties:{ id:nextId, name:'New Job', company:'', country:'NL', count:1, salary:0, experience:0, type:'', date:'' }
+// UI wiring
+document.querySelectorAll('.region-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.region-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const tag=btn.dataset.region;
+    if(tag==='europe') map.fitBounds([[-25,35],[45,72]],{padding:60});
+    else if(tag==='nl') map.fitBounds([[3.2,50.5],[7.3,53.7]],{padding:60});
+    else fitTo(filtered);
   });
-  refresh(); renderTable();
-};
+});
 
-// toggle drawer
+tabMap.onclick = ()=>{ tabMap.classList.add('active'); tabVE.classList.remove('active'); setRenderer('clusters'); fitTo(filtered); };
+tabVE.onclick  = ()=>{ tabVE.classList.add('active'); tabMap.classList.remove('active'); setRenderer('vector'); fitTo(filtered); };
+
+['input','change'].forEach(ev=>{
+  [salaryMin,salaryMax,salaryIncludeEmpty,daysSince,jtRemote,jtHybrid,jtOnsite,notApplied,qInput]
+    .forEach(el=>el.addEventListener(ev,()=>{ refresh(); renderTable(); }));
+});
+
 toggleTableBtn.onclick = ()=> drawer.classList.toggle('closed');
 closeDrawerBtn.onclick = ()=> drawer.classList.add('closed');
 window.addEventListener('keydown', e=>{ if(e.key.toLowerCase()==='t') drawer.classList.toggle('closed'); });
 
-// export CSV
-document.getElementById('exportCsv').onclick = ()=>{
-  const rows = featureRows(currentList());
-  const header = COLS.filter(c=>c.k!=='_del').map(c=>c.label).join(',');
-  const csvRows = rows.map(r=>[r.id,r.name,r.company,r.country,r.count,r.salary,r.experience,r.type,r.date,r.lat,r.lon]
-    .map(v=>{ const s=String(v??'').replace(/"/g,'""'); return /[",\n]/.test(s)?`"${s}"`:s; }).join(','));
-  const blob = new Blob([header+'\n'+csvRows.join('\n')],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='jobs.csv'; a.click(); URL.revokeObjectURL(url);
-};
-
-// UI wiring
-rendererSel.onchange = ()=> setRenderer(rendererSel.value);
-attrSel.onchange = refresh;
-classSel.onchange = refresh;
-countrySel.onchange = ()=>{ refresh(); renderTable(); };
-qInput.oninput = ()=>{ refresh(); renderTable(); };
-
-document.getElementById('tabMap').onclick = ()=>{ ['tabMap','tabEO','tabVE'].forEach(id=>document.getElementById(id).classList.remove('active')); tabMap.classList.add('active'); rendererSel.value='clusters'; setRenderer('clusters'); fitTo(filtered); };
-document.getElementById('tabEO').onclick  = ()=>{ ['tabMap','tabEO','tabVE'].forEach(id=>document.getElementById(id).classList.remove('active')); tabEO.classList.add('active'); rendererSel.value='clusters'; setRenderer('clusters'); fitTo(filtered); };
-document.getElementById('tabVE').onclick  = ()=>{ ['tabMap','tabEO','tabVE'].forEach(id=>document.getElementById(id).classList.remove('active')); tabVE.classList.add('active'); rendererSel.value='hexgrid'; setRenderer('hexgrid'); fitTo(filtered); };
-
+// Import
 fileBtn.onclick = ()=> fileInput.click();
 fileInput.onchange = (e)=>{
   const f=e.target.files?.[0]; if(!f) return;
@@ -433,27 +507,46 @@ fileInput.onchange = (e)=>{
         raw={type:'FeatureCollection', features: parsed.data.map((r,i)=>{
           const lon=+r[lonK], lat=+r[latK]; if(!isFinite(lon)||!isFinite(lat)) return null;
           return {type:'Feature',geometry:{type:'Point',coordinates:[lon,lat]},
-            properties:{ id:i, name:r.title||r.role||'Job', company:r.company||'', country:r.country||'',
-              count:+(r.count||1)||1, salary:+(r.salary||0)||0, experience:+(r.experience||0)||0, type:r.type||'', date:r.date||'' }};
+            properties:{ id:i, country:'NL', name:r.title||r.role||'Job', company:r.company||'',
+              salary:+(r.salary||0)||0, experience:+(r.experience||0)||0, type:r.type||'', date:r.date||'', applied:r.applied||'No' }};
         }).filter(Boolean)};
       }else{
         const j=JSON.parse(reader.result);
         raw = j.type==='FeatureCollection'? j : {type:'FeatureCollection', features:j.features||[]};
+        // force NL & applied default
+        raw.features.forEach((f,i)=>{ f.properties.country='NL'; f.properties.applied=f.properties.applied||'No'; f.properties.id=(f.properties.id??i); });
       }
+      computeSalaryRange();
       refresh(); renderTable(); fitTo(filtered);
     }catch(err){ alert('Failed to load: '+err.message); }
   };
   reader.readAsText(f);
 };
 
-// bootstrap
+// Add row
+addRowBtn.onclick = ()=>{
+  if(!raw) raw={type:'FeatureCollection',features:[]};
+  const nextId = raw.features.reduce((m,f)=>Math.max(m, +f.properties.id||0), -1) + 1;
+  const c = map.getCenter();
+  raw.features.push({ type:'Feature', geometry:{type:'Point', coordinates:[c.lng,c.lat]},
+    properties:{ id:nextId, country:'NL', name:'New Job', company:'', salary:0, experience:0, type:'Hybrid', date:'', applied:'No' }});
+  computeSalaryRange(); refresh(); renderTable();
+};
+
+// Bootstrap
 map.on('load', ()=>{
   ensureLayers();
-  raw = sampleData();           // example data
-  refresh();
-  renderTable();                // show table immediately
+  raw = sampleData();
+  computeSalaryRange();
+  applyFilters();
+  map.getSource(SRC).setData(filtered);
+  recolorClusters();
+  renderTable();
   fitTo(filtered);
 });
+
+// Recompute cluster color scale when the map view changes
+map.on('moveend', ()=>{ if(currentRenderer==='clusters') recolorClusters(); });
 </script>
 </body>
 </html>
