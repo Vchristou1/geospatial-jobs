@@ -30,14 +30,9 @@
     .pill.active{ background:var(--accent); color:#fff; border-color:transparent; }
     input[type="file"]{ display:none; }
 
-    /* --- DATA TABLE DRAWER --- */
-    .data-drawer{
-      position:fixed; left:0; right:0; bottom:0; height:40vh;
-      background:var(--panel); border-top:1px solid var(--stroke);
-      transform: translateY(100%); transition: transform .25s ease;
-      z-index:40; display:flex; flex-direction:column;
-    }
-    .data-drawer.open{ transform: translateY(0); }
+    /* bottom data table drawer */
+    .data-drawer{ position:fixed; left:0; right:0; bottom:0; height:40vh; background:var(--panel); border-top:1px solid var(--stroke); transform:translateY(100%); transition:transform .25s ease; z-index:40; display:flex; flex-direction:column; }
+    .data-drawer.open{ transform:translateY(0); }
     .drawer-header{ display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.5rem .75rem; border-bottom:1px solid var(--stroke); }
     .drawer-body{ overflow:auto; height:100%; }
     table.data{ width:100%; border-collapse:collapse; font-size:12px; }
@@ -47,8 +42,6 @@
     .btn{ background:var(--panel); border:1px solid var(--stroke); padding:.35rem .6rem; border-radius:.5rem; font-size:.8rem; cursor:pointer; color:var(--text); }
     .btn.primary{ background:var(--accent); border-color:transparent; color:white; }
     .muted{ color:var(--muted); }
-    /* make drawer cover full width incl. sidebar */
-    .data-drawer{ left:0; }
   </style>
 </head>
 <body>
@@ -78,7 +71,7 @@
               <input id="layerVisible" type="checkbox" checked class="accent-indigo-500"/>
               <span>Job layer</span>
             </div>
-            <span id="layerModeLabel" class="text-muted text-xs">Scatterplot</span>
+            <span id="layerModeLabel" class="text-muted text-xs">Clusters / Points</span>
           </div>
 
           <div class="mt-3 grid grid-cols-1 gap-3">
@@ -217,31 +210,34 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
       </table>
     </div>
   </div>
-  <!-- /DATA TABLE DRAWER -->
 
   <script>
     const CONFIG = {
       STYLE_URL: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
       PALETTE: ["#6C1D6B","#9C2C7A","#D4475D","#F07E2E","#FFA600"],
-      ATTR_DEFAULT: "count"
+      ATTR_DEFAULT: "count",
+      CLUSTER_RADIUS: 60,           // px
+      CLUSTER_MAX_ZOOM: 14          // stop clustering after this zoom
     };
 
-    // ---- utils ----
+    // ---------- utils ----------
     const hexToRgb = h => { const m=h.replace("#",""); return [parseInt(m.slice(0,2),16),parseInt(m.slice(2,4),16),parseInt(m.slice(4,6),16)]; };
     const quantiles = (arr,k)=>{ const a=[...arr].sort((x,y)=>x-y),q=[]; for(let i=1;i<k;i++){ const p=i/k,idx=(a.length-1)*p,lo=Math.floor(idx),hi=Math.ceil(idx); q.push(lo===hi?a[lo]:a[lo]+(a[hi]-a[lo])*(idx-lo)); } return q; };
     const equalBreaks=(arr,k)=>{ const min=Math.min(...arr),max=Math.max(...arr),step=(max-min)/k,b=[]; for(let i=1;i<k;i++) b.push(min+step*i); return b; };
     const classify=(v,br)=>{ for(let i=0;i<br.length;i++) if(v<=br[i]) return i; return br.length; };
     const fmt=n=> new Intl.NumberFormat().format(n);
 
-    // ---- map ----
+    // ---------- map ----------
     const map = new maplibregl.Map({ container:"map", style: CONFIG.STYLE_URL, center:[5.3,52.2], zoom:6.2, attributionControl:true });
     const deckOverlay = new deck.MapboxOverlay({ interleaved:true, layers:[] });
     map.addControl(deckOverlay);
 
-    // ---- state ----
+    // ---------- state ----------
     let rawData=null, filtered=null, breaks=null, activeAttr=CONFIG.ATTR_DEFAULT;
+    let currentMode = "map"; // 'map' | 'eo' | 've'
     const layerModeLabel = document.getElementById("layerModeLabel");
 
+    // ---------- sample data ----------
     function generateSampleData(){
       const jobLocations = [
         { city: "Amsterdam", company: "Leaseweb", lat: 52.3667, lon: 4.8945, job: "SAP Functional Application Manager" },
@@ -257,40 +253,7 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
       }))};
     }
 
-    // ---- layers ----
-    function buildScatter(){
-      const r = +document.getElementById("radiusRange").value;
-      const op = +document.getElementById("opacityRange").value/100;
-      const add = document.getElementById("blendToggle").checked;
-      const gl = deck.GL;
-
-      return new deck.ScatterplotLayer({
-        id:"jobs",
-        data: filtered.features,
-        getPosition: d=>d.geometry.coordinates,
-        getRadius: r,
-        radiusUnits:"pixels",
-        radiusMinPixels:1, radiusMaxPixels:30,
-        opacity: op,
-        pickable:true, autoHighlight:true,
-        parameters:{ depthTest:false, blend:true, blendFunc: add ? [gl.SRC_ALPHA, gl.ONE] : [gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA], blendEquation: gl.FUNC_ADD },
-        getFillColor: d => { const v=Number(d.properties[activeAttr]); const cls=classify(v,breaks); const rgb=hexToRgb(CONFIG.PALETTE[cls]); return [rgb[0],rgb[1],rgb[2],255]; },
-        onHover: ({x,y,object})=>{
-          const t=document.getElementById("tooltip");
-          if(object){ t.style.display="block"; t.style.left=x+"px"; t.style.top=y+"px";
-            t.innerHTML=`<div class="font-semibold">${object.properties.name}</div>
-                         <div class="text-muted">${object.properties.company}</div>
-                         <div class="mt-1 text-sm">Jobs: <b>${object.properties.count}</b> · Salary: <b>€${fmt(object.properties.salary)}</b> · Exp: <b>${object.properties.experience}y</b></div>
-                         <div class="text-[11px] text-muted mt-1">${object.geometry.coordinates[1].toFixed(4)}, ${object.geometry.coordinates[0].toFixed(4)}</div>`; }
-          else t.style.display="none";
-        },
-        onClick: ({object})=>{
-          if(!object) return;
-          map.flyTo({ center: object.geometry.coordinates, zoom: 9, essential: true });
-        }
-      });
-    }
-
+    // ---------- Deck.gl layers for VE ----------
     function buildHexLayer(){
       return new deck.HexagonLayer({
         id:"jobs-hex",
@@ -309,9 +272,120 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
       });
     }
 
-    // ---- classification / filtering ----
+    // ---------- clustering layers for Map/EO ----------
+    const CLUSTER_SOURCE = "jobs-cluster-src";
+    const L_CLUSTER_CIRCLES = "jobs-cluster-circles";
+    const L_CLUSTER_COUNT   = "jobs-cluster-count";
+    const L_UNCLUSTERED     = "jobs-unclustered";
+
+    function ensureClusterLayers(){
+      if(map.getSource(CLUSTER_SOURCE)) return;
+
+      map.addSource(CLUSTER_SOURCE, {
+        type: "geojson",
+        data: {type:"FeatureCollection", features:[]},
+        cluster: true,
+        clusterRadius: CONFIG.CLUSTER_RADIUS,
+        clusterMaxZoom: CONFIG.CLUSTER_MAX_ZOOM
+      });
+
+      // color thresholds similar to your screenshot
+      const colorByCount = [
+        "step", ["get","point_count"],
+        "#2b7bff",     // 0-9
+        10, "#3aa0ff", // 10-29
+        30, "#ffd166", // 30-69
+        70, "#ff8c42", // 70-99
+        100, "#ff4d4d" // 100+
+      ];
+      const radiusByCount = [
+        "step", ["get","point_count"],
+        14,      // <=9
+        10, 18,  // <=29
+        30, 22,  // <=69
+        70, 28,  // <=99
+        100, 34  // 100+
+      ];
+
+      map.addLayer({
+        id: L_CLUSTER_CIRCLES,
+        type: "circle",
+        source: CLUSTER_SOURCE,
+        filter: ["has","point_count"],
+        paint: {
+          "circle-color": colorByCount,
+          "circle-radius": radiusByCount,
+          "circle-opacity": 0.9,
+          "circle-stroke-color": "#0F1115",
+          "circle-stroke-width": 2
+        }
+      });
+
+      map.addLayer({
+        id: L_CLUSTER_COUNT,
+        type: "symbol",
+        source: CLUSTER_SOURCE,
+        filter: ["has","point_count"],
+        layout: {
+          "text-field": ["get","point_count"],
+          "text-size": 12
+        },
+        paint: { "text-color": "#ffffff" }
+      });
+
+      map.addLayer({
+        id: L_UNCLUSTERED,
+        type: "circle",
+        source: CLUSTER_SOURCE,
+        filter: ["!", ["has", "point_count"]],
+        paint: {
+          "circle-color": "#ffa600",
+          "circle-radius": 6,
+          "circle-opacity": 0.85,
+          "circle-stroke-color": "#0F1115",
+          "circle-stroke-width": 1.5
+        }
+      });
+
+      // click cluster → zoom in
+      map.on("click", L_CLUSTER_CIRCLES, e=>{
+        const feature = e.features?.[0];
+        if(!feature) return;
+        const src = map.getSource(CLUSTER_SOURCE);
+        src.getClusterExpansionZoom(feature.properties.cluster_id, (err, zoom)=>{
+          if(err) return;
+          map.easeTo({ center: feature.geometry.coordinates, zoom });
+        });
+      });
+
+      // click unclustered → fly to point
+      map.on("click", L_UNCLUSTERED, e=>{
+        const f=e.features?.[0]; if(!f) return;
+        map.flyTo({ center: f.geometry.coordinates, zoom: 10, essential: true });
+      });
+
+      map.on("mouseenter", L_CLUSTER_CIRCLES, ()=> map.getCanvas().style.cursor="pointer");
+      map.on("mouseleave", L_CLUSTER_CIRCLES, ()=> map.getCanvas().style.cursor="");
+      map.on("mouseenter", L_UNCLUSTERED, ()=> map.getCanvas().style.cursor="pointer");
+      map.on("mouseleave", L_UNCLUSTERED, ()=> map.getCanvas().style.cursor="");
+    }
+
+    function updateClusterData(fc){
+      ensureClusterLayers();
+      const src = map.getSource(CLUSTER_SOURCE);
+      if(src) src.setData(fc);
+    }
+
+    function showClusterLayers(show){
+      [L_CLUSTER_CIRCLES, L_CLUSTER_COUNT, L_UNCLUSTERED].forEach(id=>{
+        if(map.getLayer(id)) map.setLayoutProperty(id, "visibility", show ? "visible" : "none");
+      });
+    }
+
+    // ---------- classification / filters / table ----------
     function recomputeColoring(){
       const vals = filtered.features.map(f=>Number(f.properties[activeAttr])).filter(Number.isFinite);
+      if(vals.length===0){ breaks=[0,0,0,0]; return; }
       const method = document.getElementById("classSelect").value;
       breaks = method==="equal" ? equalBreaks(vals, CONFIG.PALETTE.length) : quantiles(vals, CONFIG.PALETTE.length);
       document.getElementById("legendRamp").innerHTML = CONFIG.PALETTE.map(c=>`<div style="flex:1;background:${c}"></div>`).join("");
@@ -320,7 +394,7 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
     }
 
     function applyFilters(){
-      if(!rawData){ filtered={type:"FeatureCollection",features:[]}; return; }
+      if(!rawData){ filtered={type:"FeatureCollection", features:[]}; return; }
       const iso=document.getElementById("countryFilter").value;
       const q =(document.getElementById("searchFilter").value||"").trim().toLowerCase();
       filtered = { type:"FeatureCollection", features: rawData.features.filter(f=>{
@@ -330,122 +404,7 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
       })};
     }
 
-    function refreshScatter(){ layerModeLabel.textContent="Scatterplot"; recomputeColoring(); deckOverlay.setProps({ layers:[buildScatter()] }); updateTable(); }
-    function refreshHex(){ layerModeLabel.textContent="Hex aggregation"; recomputeColoring(); deckOverlay.setProps({ layers:[buildHexLayer()] }); updateTable(); }
-
-    function fitTo(fc, pad=100){ const b=turf.bbox(fc); map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:pad,duration:800}); }
-    function flyRegion(tag){ if(tag==="europe") map.fitBounds([[-25,35],[45,72]],{padding:50}); else if(tag==="nl") map.fitBounds([[3.2,50.5],[7.3,53.7]],{padding:60}); else if(filtered?.features?.length) fitTo(filtered); }
-
-    // ---- data loaders ----
-    function csvToGeoJSON(rows){
-      const header = Object.keys(rows[0]||{}).reduce((m,k)=>{ m[k.toLowerCase()]=k; return m; },{});
-      const lonK=header.longitude||header.lon||header.lng||header.x;
-      const latK=header.latitude||header.lat||header.y;
-      const features=[];
-      for(let i=0;i<rows.length;i++){
-        const r=rows[i];
-        const lon = Number(r[lonK]); const lat = Number(r[latK]);
-        if(Number.isFinite(lon) && Number.isFinite(lat)){
-          features.push({
-            type:"Feature",
-            geometry:{type:"Point",coordinates:[lon,lat]},
-            properties:{
-              id:r.id ?? i,
-              name:r.title ?? r.job_title ?? r.role ?? r.name ?? "Job",
-              company:r.company ?? r.employer ?? "",
-              country:r.country ?? "",
-              count: Number(r.count ?? 1) || 1,
-              salary: Number(r.salary ?? r.pay ?? 0) || 0,
-              experience: Number(r.experience ?? r.exp ?? 0) || 0
-            }
-          });
-        }
-      }
-      return { type:"FeatureCollection", features };
-    }
-
-    async function geocode(text){
-      const url=`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(text)}&limit=1`;
-      const res=await fetch(url,{headers:{'Accept':'application/json'}});
-      const j=await res.json();
-      if(!Array.isArray(j) || j.length===0) return null;
-      return [parseFloat(j[0].lon), parseFloat(j[0].lat)];
-    }
-
-    // ---- UI wiring ----
-    function setActivePill(id){ ["tabMap","tabEO","tabVE"].forEach(pid=>document.getElementById(pid).classList.toggle("active", pid===id)); }
-
-    document.getElementById("tabMap").addEventListener("click", ()=>{ setActivePill("tabMap"); applyFilters(); refreshScatter(); if(filtered.features.length) fitTo(filtered,90); });
-    document.getElementById("tabEO").addEventListener("click", ()=>{ 
-      setActivePill("tabEO");
-      const kws=["earth","observation","remote","sensing","gis","copernicus","sentinel"];
-      filtered={ type:"FeatureCollection", features: (rawData?.features||[]).filter(f=>{ const s=`${f.properties.name} ${f.properties.company}`.toLowerCase(); return kws.some(k=>s.includes(k)); }) };
-      refreshScatter();
-      if(filtered.features.length) fitTo(filtered,90);
-    });
-    document.getElementById("tabVE").addEventListener("click", ()=>{ setActivePill("tabVE"); applyFilters(); refreshHex(); if(filtered.features.length) fitTo(filtered,90); });
-
-    document.getElementById("btnAddLayer").addEventListener("click", ()=> document.getElementById("fileInput").click());
-    document.getElementById("fileInput").addEventListener("change", (e)=>{
-      const f=e.target.files?.[0]; if(!f) return;
-      const reader=new FileReader();
-      reader.onload=()=>{ try{
-        let fc;
-        if(f.name.toLowerCase().endsWith(".csv")){
-          const parsed=Papa.parse(reader.result,{header:true, dynamicTyping:true, skipEmptyLines:true});
-          fc=csvToGeoJSON(parsed.data);
-        }else{
-          const json=JSON.parse(reader.result);
-          fc=json.type==="FeatureCollection"?json:{type:"FeatureCollection",features:json.features??[]};
-        }
-        rawData=fc; applyFilters(); refreshScatter(); if(filtered.features.length) fitTo(filtered,100);
-      }catch(err){ alert("Failed to load file: "+err.message); } };
-      reader.readAsText(f);
-    });
-
-    document.getElementById("visualizeJobsBtn").addEventListener("click", async ()=>{
-      const text=(document.getElementById("jobDataInput").value||"").trim();
-      if(!text){ alert("Paste some rows first."); return; }
-      const parsed=Papa.parse(text,{header:true, dynamicTyping:true, skipEmptyLines:true});
-      let fc=csvToGeoJSON(parsed.data);
-
-      if(fc.features.length===0){
-        const locKey=document.getElementById("locationColumn").value;
-        const titleKey=document.getElementById("titleColumn").value;
-        const cache=new Map(); const feats=[];
-        for(const row of parsed.data){
-          const loc=row[locKey]; const title=row[titleKey];
-          if(!loc || !title) continue;
-          let coords=cache.get(loc);
-          if(!coords){ try{ coords=await geocode(loc); cache.set(loc,coords); }catch(e){ coords=null; } }
-          if(coords){
-            feats.push({ type:"Feature", geometry:{type:"Point",coordinates:coords},
-              properties:{ id:feats.length, name:title, company: row.company ?? row.employer ?? "", country: row.country ?? "", count:1, salary: Number(row.salary)||0, experience: Number(row.experience)||0 } });
-          }
-        }
-        fc={type:"FeatureCollection",features:feats};
-      }
-
-      if(fc.features.length===0){ alert("No mappable rows found. Add lat/lon columns or a geocodable location."); return; }
-      rawData=fc; applyFilters(); refreshScatter(); fitTo(filtered,100);
-    });
-
-    document.getElementById("layerVisible").addEventListener("change",(e)=>{ deckOverlay.setProps({ layers: e.target.checked ? deckOverlay.props.layers : [] }); });
-    document.getElementById("attrSelect").addEventListener("change",(e)=>{ activeAttr=e.target.value; (document.getElementById("tabVE").classList.contains("active")?refreshHex:refreshScatter)(); });
-    document.getElementById("classSelect").addEventListener("change", ()=> (document.getElementById("tabVE").classList.contains("active")?refreshHex:refreshScatter)() );
-    document.getElementById("radiusRange").addEventListener("input", ()=> (document.getElementById("tabVE").classList.contains("active")?refreshHex:refreshScatter)() );
-    document.getElementById("opacityRange").addEventListener("input", ()=> (document.getElementById("tabVE").classList.contains("active")?refreshHex:refreshScatter)() );
-    document.getElementById("blendToggle").addEventListener("change", ()=> (document.getElementById("tabVE").classList.contains("active")?refreshHex:refreshScatter)() );
-
-    document.getElementById("countryFilter").addEventListener("change", ()=>{ applyFilters(); (document.getElementById("tabVE").classList.contains("active")?refreshHex:refreshScatter)(); if(filtered.features.length) fitTo(filtered,80); });
-    document.getElementById("searchFilter").addEventListener("input", ()=>{ applyFilters(); (document.getElementById("tabVE").classList.contains("active")?refreshHex:refreshScatter)(); });
-
-    // region buttons
-    document.querySelectorAll(".region-btn").forEach(btn=>{
-      btn.addEventListener("click", ()=>{ document.querySelectorAll(".region-btn").forEach(b=>b.classList.remove("active")); btn.classList.add("active"); flyRegion(btn.dataset.region); });
-    });
-
-    // ---- DATA TABLE LOGIC ----
+    // table drawer state
     const drawer = document.getElementById("dataDrawer");
     const toggleTableBtn = document.getElementById("toggleTableBtn");
     const closeDrawer = document.getElementById("closeDrawer");
@@ -470,122 +429,172 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
       {key:"lat", label:"Lat"},
       {key:"lon", label:"Lon"}
     ];
+    let sortKey="name", sortAsc=true, page=1;
 
-    let sortKey = "name";
-    let sortAsc = true;
-    let page = 1;
-
-    function toggleDrawer(open){
-      drawer.classList.toggle("open", open ?? !drawer.classList.contains("open"));
-      drawer.setAttribute("aria-hidden", drawer.classList.contains("open") ? "false" : "true");
-    }
-
-    function currentFeatureList(){
-      const useFiltered = tableFilteredToggle.checked;
-      return (useFiltered ? (filtered?.features||[]) : (rawData?.features||[]));
-    }
-
-    function rowsFromFeatures(features){
-      return features.map(f => ({
-        id: f.properties.id,
-        name: f.properties.name,
-        company: f.properties.company,
-        country: f.properties.country,
-        count: Number(f.properties.count ?? 0),
-        salary: Number(f.properties.salary ?? 0),
-        experience: Number(f.properties.experience ?? 0),
-        lat: Number(f.geometry.coordinates[1]),
-        lon: Number(f.geometry.coordinates[0]),
-        _coords: f.geometry.coordinates
-      }));
-    }
+    function toggleDrawer(open){ drawer.classList.toggle("open", open ?? !drawer.classList.contains("open")); drawer.setAttribute("aria-hidden", drawer.classList.contains("open")?"false":"true"); }
+    function currentFeatureList(){ return (tableFilteredToggle.checked ? (filtered?.features||[]) : (rawData?.features||[])); }
+    function rowsFromFeatures(features){ return features.map(f=>({ id:f.properties.id, name:f.properties.name, company:f.properties.company, country:f.properties.country, count:+(f.properties.count||0), salary:+(f.properties.salary||0), experience:+(f.properties.experience||0), lat:+f.geometry.coordinates[1], lon:+f.geometry.coordinates[0], _coords:f.geometry.coordinates })); }
 
     function updateTable(){
-      const size = Number(rowsPerPageSel.value || 100);
+      const size = Number(rowsPerPageSel.value||100);
       let rows = rowsFromFeatures(currentFeatureList());
-
-      // sorting
-      rows.sort((a,b)=>{
-        const va=a[sortKey], vb=b[sortKey];
-        if(va==null && vb==null) return 0;
-        if(va==null) return 1;
-        if(vb==null) return -1;
-        if(typeof va==="number" && typeof vb==="number") return sortAsc ? va-vb : vb-va;
-        return sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
-      });
-
-      const total = rows.length;
-      const totalPages = Math.max(1, Math.ceil(total/size));
-      if(page>totalPages) page=totalPages;
-      const start = (page-1)*size, end = start+size;
-      const pageRows = rows.slice(start,end);
-
-      // header
-      tableHead.innerHTML = "<tr>" + COLUMNS.map(c=>`<th data-key="${c.key}">${c.label}${sortKey===c.key ? (sortAsc ? " ▲" : " ▼") : ""}</th>`).join("") + "</tr>";
-      // body
-      tableBody.innerHTML = pageRows.map(r =>
-        `<tr class="hover:bg-black/20 cursor-pointer" data-center="${r._coords}">
-          <td>${r.id ?? ""}</td>
-          <td title="${r.name??""}">${r.name??""}</td>
-          <td title="${r.company??""}">${r.company??""}</td>
-          <td>${r.country??""}</td>
-          <td>${r.count??""}</td>
-          <td>${r.salary? "€"+fmt(r.salary):""}</td>
-          <td>${r.experience??""}</td>
-          <td>${r.lat?.toFixed?.(4) ?? ""}</td>
-          <td>${r.lon?.toFixed?.(4) ?? ""}</td>
-        </tr>`
-      ).join("");
-
-      pageInfo.textContent = `${page} / ${totalPages}`;
-      tableCount.textContent = `(${fmt(total)} rows)`;
-
-      // header sort clicks
-      [...tableHead.querySelectorAll("th")].forEach(th=>{
-        th.onclick = ()=>{
-          const k = th.dataset.key;
-          if(k === sortKey) sortAsc = !sortAsc; else { sortKey = k; sortAsc = true; }
-          updateTable();
-        };
-      });
-
-      // row click → fly to
-      [...tableBody.querySelectorAll("tr")].forEach(tr=>{
-        tr.onclick = ()=>{
-          const center = tr.getAttribute("data-center").split(",").map(Number);
-          if(center.length===2 && Number.isFinite(center[0])) map.flyTo({ center, zoom: 10, essential: true });
-        };
-      });
+      rows.sort((a,b)=>{ const va=a[sortKey], vb=b[sortKey]; if(va==null && vb==null) return 0; if(va==null) return 1; if(vb==null) return -1; if(typeof va==="number"&&typeof vb==="number") return sortAsc?va-vb:vb-va; return (sortAsc?1:-1)*String(va).localeCompare(String(vb)); });
+      const total = rows.length; const totalPages=Math.max(1,Math.ceil(total/size)); if(page>totalPages) page=totalPages;
+      const start=(page-1)*size, end=start+size, pageRows=rows.slice(start,end);
+      tableHead.innerHTML = "<tr>"+COLUMNS.map(c=>`<th data-key="${c.key}">${c.label}${sortKey===c.key?(sortAsc?" ▲":" ▼"):""}</th>`).join("")+"</tr>";
+      tableBody.innerHTML = pageRows.map(r=>`<tr class="hover:bg-black/20 cursor-pointer" data-center="${r._coords}">
+          <td>${r.id??""}</td><td title="${r.name??""}">${r.name??""}</td><td title="${r.company??""}">${r.company??""}</td>
+          <td>${r.country??""}</td><td>${r.count??""}</td><td>${r.salary? "€"+fmt(r.salary):""}</td><td>${r.experience??""}</td>
+          <td>${r.lat?.toFixed?.(4)??""}</td><td>${r.lon?.toFixed?.(4)??""}</td></tr>`).join("");
+      pageInfo.textContent = `${page} / ${totalPages}`; tableCount.textContent = `(${fmt(total)} rows)`;
+      [...tableHead.querySelectorAll("th")].forEach(th=> th.onclick=()=>{ const k=th.dataset.key; if(k===sortKey) sortAsc=!sortAsc; else {sortKey=k; sortAsc=true;} updateTable(); });
+      [...tableBody.querySelectorAll("tr")].forEach(tr=> tr.onclick=()=>{ const center=tr.getAttribute("data-center").split(",").map(Number); if(center.length===2) map.flyTo({ center, zoom:10, essential:true }); });
     }
-
-    prevPageBtn.onclick = ()=>{ page = Math.max(1, page-1); updateTable(); };
-    nextPageBtn.onclick = ()=>{ page = page+1; updateTable(); };
-    rowsPerPageSel.onchange = ()=>{ page = 1; updateTable(); };
-    tableFilteredToggle.onchange = ()=>{ page = 1; updateTable(); };
+    prevPageBtn.onclick = ()=>{ page=Math.max(1,page-1); updateTable(); };
+    nextPageBtn.onclick = ()=>{ page=page+1; updateTable(); };
+    rowsPerPageSel.onchange = ()=>{ page=1; updateTable(); };
+    tableFilteredToggle.onchange = ()=>{ page=1; updateTable(); };
     exportCsvBtn.onclick = ()=>{
       const rows = rowsFromFeatures(currentFeatureList());
       const header = COLUMNS.map(c=>c.label).join(",");
       const csv = [header, ...rows.map(r => [r.id,r.name,r.company,r.country,r.count,r.salary,r.experience,r.lat,r.lon].map(v=>{
-        if(v==null) return "";
-        const s=String(v).replace(/"/g,'""');
-        return /[",\n]/.test(s) ? `"${s}"` : s;
+        if(v==null) return ""; const s=String(v).replace(/"/g,'""'); return /[",\n]/.test(s)?`"${s}"`:s;
       }).join(","))].join("\n");
-      const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href=url; a.download="jobs.csv"; a.click();
-      URL.revokeObjectURL(url);
+      const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="jobs.csv"; a.click(); URL.revokeObjectURL(url);
     };
-
-    toggleTableBtn.onclick = ()=> toggleDrawer();
-    closeDrawer.onclick = ()=> toggleDrawer(false);
+    document.getElementById("toggleTableBtn").onclick = ()=> toggleDrawer();
+    document.getElementById("closeDrawer").onclick = ()=> toggleDrawer(false);
     window.addEventListener("keydown", (e)=>{ if(e.key.toLowerCase()==="t") toggleDrawer(); if(e.key==="Escape") toggleDrawer(false); });
 
-    // init
+    // ---------- mode switching ----------
+    function setMode(mode){
+      currentMode = mode;
+      ["tabMap","tabEO","tabVE"].forEach(id=> document.getElementById(id).classList.toggle("active", id === ("tab"+mode[0].toUpperCase()+mode.slice(1)) ));
+      if(mode==="ve"){
+        // hex aggregation
+        layerModeLabel.textContent = "Hex aggregation";
+        showClusterLayers(false);
+        recomputeColoring();
+        deckOverlay.setProps({ layers:[buildHexLayer()] });
+      } else {
+        // clustered points (map / eo)
+        layerModeLabel.textContent = "Clusters / Points";
+        deckOverlay.setProps({ layers:[] });
+        updateClusterData(filtered);
+        showClusterLayers(true);
+      }
+      updateTable();
+    }
+
+    // ---------- map helpers ----------
+    function fitTo(fc,pad=100){ const b=turf.bbox(fc); map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:pad,duration:800}); }
+    function flyRegion(tag){ if(tag==="europe") map.fitBounds([[-25,35],[45,72]],{padding:50}); else if(tag==="nl") map.fitBounds([[3.2,50.5],[7.3,53.7]],{padding:60}); else if(filtered?.features?.length) fitTo(filtered); }
+
+    // ---------- data -> GeoJSON from CSV ----------
+    function csvToGeoJSON(rows){
+      const header = Object.keys(rows[0]||{}).reduce((m,k)=>{ m[k.toLowerCase()]=k; return m; },{});
+      const lonK=header.longitude||header.lon||header.lng||header.x;
+      const latK=header.latitude||header.lat||header.y;
+      const features=[];
+      for(let i=0;i<rows.length;i++){
+        const r=rows[i], lon=Number(r[lonK]), lat=Number(r[latK]);
+        if(Number.isFinite(lon) && Number.isFinite(lat)){
+          features.push({ type:"Feature", geometry:{type:"Point",coordinates:[lon,lat]}, properties:{ id:r.id ?? i, name:r.title ?? r.job_title ?? r.role ?? r.name ?? "Job", company:r.company ?? r.employer ?? "", country:r.country ?? "", count: Number(r.count ?? 1) || 1, salary: Number(r.salary ?? r.pay ?? 0) || 0, experience: Number(r.experience ?? r.exp ?? 0) || 0 } });
+        }
+      }
+      return { type:"FeatureCollection", features };
+    }
+
+    async function geocode(text){
+      const url=`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(text)}&limit=1`;
+      const res=await fetch(url,{headers:{'Accept':'application/json'}});
+      const j=await res.json();
+      if(!Array.isArray(j) || j.length===0) return null;
+      return [parseFloat(j[0].lon), parseFloat(j[0].lat)];
+    }
+
+    // ---------- UI listeners ----------
+    document.getElementById("tabMap").addEventListener("click", ()=>{ applyFilters(); setMode("map"); if(filtered.features.length) fitTo(filtered,90); });
+    document.getElementById("tabEO").addEventListener("click", ()=>{
+      const kws=["earth","observation","remote","sensing","gis","copernicus","sentinel"];
+      const base = rawData?.features || [];
+      filtered = { type:"FeatureCollection", features: base.filter(f=>{ const s=`${f.properties.name} ${f.properties.company}`.toLowerCase(); return kws.some(k=>s.includes(k)); }) };
+      setMode("eo"); if(filtered.features.length) fitTo(filtered,90);
+    });
+    document.getElementById("tabVE").addEventListener("click", ()=>{ applyFilters(); setMode("ve"); if(filtered.features.length) fitTo(filtered,90); });
+
+    document.getElementById("btnAddLayer").addEventListener("click", ()=> document.getElementById("fileInput").click());
+    document.getElementById("fileInput").addEventListener("change", (e)=>{
+      const f=e.target.files?.[0]; if(!f) return;
+      const reader=new FileReader();
+      reader.onload=()=>{ try{
+        let fc;
+        if(f.name.toLowerCase().endsWith(".csv")){
+          const parsed=Papa.parse(reader.result,{header:true, dynamicTyping:true, skipEmptyLines:true});
+          fc=csvToGeoJSON(parsed.data);
+        }else{
+          const json=JSON.parse(reader.result);
+          fc=json.type==="FeatureCollection"?json:{type:"FeatureCollection",features:json.features??[]};
+        }
+        rawData=fc; applyFilters();
+        // update both possible renderers
+        updateClusterData(filtered);
+        if(currentMode==="ve") deckOverlay.setProps({ layers:[buildHexLayer()] });
+        setMode(currentMode);
+        if(filtered.features.length) fitTo(filtered,100);
+      }catch(err){ alert("Failed to load file: "+err.message); } };
+      reader.readAsText(f);
+    });
+
+    document.getElementById("visualizeJobsBtn").addEventListener("click", async ()=>{
+      const text=(document.getElementById("jobDataInput").value||"").trim();
+      if(!text){ alert("Paste some rows first."); return; }
+      const parsed=Papa.parse(text,{header:true, dynamicTyping:true, skipEmptyLines:true});
+      let fc=csvToGeoJSON(parsed.data);
+      if(fc.features.length===0){
+        const locKey=document.getElementById("locationColumn").value;
+        const titleKey=document.getElementById("titleColumn").value;
+        const cache=new Map(); const feats=[];
+        for(const row of parsed.data){
+          const loc=row[locKey]; const title=row[titleKey];
+          if(!loc || !title) continue;
+          let coords=cache.get(loc); if(!coords){ try{ coords=await geocode(loc); cache.set(loc,coords); }catch(e){ coords=null; } }
+          if(coords){ feats.push({ type:"Feature", geometry:{type:"Point",coordinates:coords}, properties:{ id:feats.length, name:title, company: row.company ?? row.employer ?? "", country: row.country ?? "", count:1, salary: Number(row.salary)||0, experience: Number(row.experience)||0 } }); }
+        }
+        fc={type:"FeatureCollection",features:feats};
+      }
+      if(fc.features.length===0){ alert("No mappable rows found."); return; }
+      rawData=fc; applyFilters();
+      updateClusterData(filtered);
+      setMode(currentMode); // refresh renderer + table
+      fitTo(filtered,100);
+    });
+
+    document.getElementById("layerVisible").addEventListener("change",(e)=>{
+      const on = e.target.checked;
+      if(currentMode==="ve"){ deckOverlay.setProps({ layers: on ? [buildHexLayer()] : [] }); }
+      else { showClusterLayers(on); }
+    });
+
+    ["attrSelect","classSelect","radiusRange","opacityRange","blendToggle"].forEach(id=>{
+      document.getElementById(id).addEventListener("change", ()=>{ if(currentMode==="ve"){ deckOverlay.setProps({ layers:[buildHexLayer()] }); } updateTable(); });
+      document.getElementById(id).addEventListener("input",  ()=>{ if(currentMode==="ve"){ deckOverlay.setProps({ layers:[buildHexLayer()] }); } });
+    });
+
+    document.getElementById("countryFilter").addEventListener("change", ()=>{ applyFilters(); updateClusterData(filtered); setMode(currentMode); if(filtered.features.length) fitTo(filtered,80); });
+    document.getElementById("searchFilter").addEventListener("input", ()=>{ applyFilters(); updateClusterData(filtered); setMode(currentMode); });
+
+    document.querySelectorAll(".region-btn").forEach(btn=>{
+      btn.addEventListener("click", ()=>{ document.querySelectorAll(".region-btn").forEach(b=>b.classList.remove("active")); btn.classList.add("active"); flyRegion(btn.dataset.region); });
+    });
+
+    // ---------- init ----------
     map.on("load", ()=>{
+      ensureClusterLayers();
       rawData = generateSampleData();
       applyFilters();
-      refreshScatter();
+      updateClusterData(filtered);
+      setMode("map");
       if(filtered.features.length) fitTo(filtered,100);
       updateTable();
     });
