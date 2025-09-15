@@ -29,6 +29,26 @@
     .pill{ padding:.35rem .6rem; border:1px solid var(--stroke); border-radius:.6rem; font-size:.75rem; color:var(--muted); cursor:pointer; }
     .pill.active{ background:var(--accent); color:#fff; border-color:transparent; }
     input[type="file"]{ display:none; }
+
+    /* --- DATA TABLE DRAWER --- */
+    .data-drawer{
+      position:fixed; left:0; right:0; bottom:0; height:40vh;
+      background:var(--panel); border-top:1px solid var(--stroke);
+      transform: translateY(100%); transition: transform .25s ease;
+      z-index:40; display:flex; flex-direction:column;
+    }
+    .data-drawer.open{ transform: translateY(0); }
+    .drawer-header{ display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.5rem .75rem; border-bottom:1px solid var(--stroke); }
+    .drawer-body{ overflow:auto; height:100%; }
+    table.data{ width:100%; border-collapse:collapse; font-size:12px; }
+    table.data thead th{ position:sticky; top:0; background:#0F1115; border-bottom:1px solid var(--stroke); text-align:left; padding:.5rem .6rem; cursor:pointer; }
+    table.data tbody td{ border-bottom:1px solid var(--stroke); padding:.45rem .6rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .toolbar{ display:flex; align-items:center; gap:.5rem; }
+    .btn{ background:var(--panel); border:1px solid var(--stroke); padding:.35rem .6rem; border-radius:.5rem; font-size:.8rem; cursor:pointer; color:var(--text); }
+    .btn.primary{ background:var(--accent); border-color:transparent; color:white; }
+    .muted{ color:var(--muted); }
+    /* make drawer cover full width incl. sidebar */
+    .data-drawer{ left:0; }
   </style>
 </head>
 <body>
@@ -132,7 +152,10 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
           </div>
         </div>
 
-        <button id="visualizeJobsBtn" class="bg-accent text-white w-full py-2 rounded-md">Visualize on Map</button>
+        <div class="flex gap-2">
+          <button id="visualizeJobsBtn" class="bg-accent text-white w-full py-2 rounded-md">Visualize on Map</button>
+          <button id="toggleTableBtn" type="button" class="w-40 py-2 rounded-md btn">Toggle Table</button>
+        </div>
       </section>
 
       <!-- Filters -->
@@ -164,6 +187,38 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
   <div id="map"></div>
   <div id="tooltip" class="tooltip" style="display:none;"></div>
 
+  <!-- DATA TABLE DRAWER -->
+  <div id="dataDrawer" class="data-drawer" aria-hidden="true">
+    <div class="drawer-header">
+      <div class="toolbar">
+        <strong>Data table</strong>
+        <label class="text-xs flex items-center gap-1 ml-3">
+          <input id="tableFilteredToggle" type="checkbox" class="accent-indigo-500" checked/>
+          <span class="muted">Use current filters</span>
+        </label>
+        <span id="tableCount" class="muted text-xs"></span>
+      </div>
+      <div class="toolbar">
+        <label class="text-xs muted">Rows / page</label>
+        <select id="rowsPerPage" class="bg-panel border border-stroke rounded px-2 py-1 text-xs">
+          <option>50</option><option selected>100</option><option>500</option>
+        </select>
+        <button id="prevPage" class="btn">Prev</button>
+        <span id="pageInfo" class="muted text-xs">1 / 1</span>
+        <button id="nextPage" class="btn">Next</button>
+        <button id="exportCsv" class="btn">Export CSV</button>
+        <button id="closeDrawer" class="btn">Close</button>
+      </div>
+    </div>
+    <div class="drawer-body">
+      <table class="data" id="dataTable">
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+  <!-- /DATA TABLE DRAWER -->
+
   <script>
     const CONFIG = {
       STYLE_URL: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
@@ -190,7 +245,7 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
     function generateSampleData(){
       const jobLocations = [
         { city: "Amsterdam", company: "Leaseweb", lat: 52.3667, lon: 4.8945, job: "SAP Functional Application Manager" },
-        { city: "Amsterdam", company: "Deloitte", lat: 52.3667, lon: 4.8945, job: "Junior SAP Consultant" },
+        { city: "Amsterdam", company: "Deloitte",  lat: 52.3667, lon: 4.8945, job: "Junior SAP Consultant" },
         { city: "Lieshout",  company: "Royal Swinkels", lat: 51.5194, lon: 5.5958, job: "Junior SAP Application Manager" },
         { city: "Utrecht",   company: "Billennium", lat: 52.0907, lon: 5.1214, job: "SAP Consultant (Remote)" },
         { city: "Eindhoven", company: "SixteenFifty", lat: 51.4416, lon: 5.4697, job: "SAP MM Support Consultant" }
@@ -275,8 +330,8 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
       })};
     }
 
-    function refreshScatter(){ layerModeLabel.textContent="Scatterplot"; recomputeColoring(); deckOverlay.setProps({ layers:[buildScatter()] }); }
-    function refreshHex(){ layerModeLabel.textContent="Hex aggregation"; recomputeColoring(); deckOverlay.setProps({ layers:[buildHexLayer()] }); }
+    function refreshScatter(){ layerModeLabel.textContent="Scatterplot"; recomputeColoring(); deckOverlay.setProps({ layers:[buildScatter()] }); updateTable(); }
+    function refreshHex(){ layerModeLabel.textContent="Hex aggregation"; recomputeColoring(); deckOverlay.setProps({ layers:[buildHexLayer()] }); updateTable(); }
 
     function fitTo(fc, pad=100){ const b=turf.bbox(fc); map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:pad,duration:800}); }
     function flyRegion(tag){ if(tag==="europe") map.fitBounds([[-25,35],[45,72]],{padding:50}); else if(tag==="nl") map.fitBounds([[3.2,50.5],[7.3,53.7]],{padding:60}); else if(filtered?.features?.length) fitTo(filtered); }
@@ -323,7 +378,6 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
     document.getElementById("tabMap").addEventListener("click", ()=>{ setActivePill("tabMap"); applyFilters(); refreshScatter(); if(filtered.features.length) fitTo(filtered,90); });
     document.getElementById("tabEO").addEventListener("click", ()=>{ 
       setActivePill("tabEO");
-      // simple EO keywords
       const kws=["earth","observation","remote","sensing","gis","copernicus","sentinel"];
       filtered={ type:"FeatureCollection", features: (rawData?.features||[]).filter(f=>{ const s=`${f.properties.name} ${f.properties.company}`.toLowerCase(); return kws.some(k=>s.includes(k)); }) };
       refreshScatter();
@@ -355,7 +409,6 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
       const parsed=Papa.parse(text,{header:true, dynamicTyping:true, skipEmptyLines:true});
       let fc=csvToGeoJSON(parsed.data);
 
-      // if no lat/lon, try geocoding a location column
       if(fc.features.length===0){
         const locKey=document.getElementById("locationColumn").value;
         const titleKey=document.getElementById("titleColumn").value;
@@ -377,7 +430,6 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
       rawData=fc; applyFilters(); refreshScatter(); fitTo(filtered,100);
     });
 
-    // sliders / filters
     document.getElementById("layerVisible").addEventListener("change",(e)=>{ deckOverlay.setProps({ layers: e.target.checked ? deckOverlay.props.layers : [] }); });
     document.getElementById("attrSelect").addEventListener("change",(e)=>{ activeAttr=e.target.value; (document.getElementById("tabVE").classList.contains("active")?refreshHex:refreshScatter)(); });
     document.getElementById("classSelect").addEventListener("change", ()=> (document.getElementById("tabVE").classList.contains("active")?refreshHex:refreshScatter)() );
@@ -393,12 +445,149 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
       btn.addEventListener("click", ()=>{ document.querySelectorAll(".region-btn").forEach(b=>b.classList.remove("active")); btn.classList.add("active"); flyRegion(btn.dataset.region); });
     });
 
+    // ---- DATA TABLE LOGIC ----
+    const drawer = document.getElementById("dataDrawer");
+    const toggleTableBtn = document.getElementById("toggleTableBtn");
+    const closeDrawer = document.getElementById("closeDrawer");
+    const tableHead = document.getElementById("tableHead");
+    const tableBody = document.getElementById("tableBody");
+    const tableFilteredToggle = document.getElementById("tableFilteredToggle");
+    const rowsPerPageSel = document.getElementById("rowsPerPage");
+    const pageInfo = document.getElementById("pageInfo");
+    const tableCount = document.getElementById("tableCount");
+    const prevPageBtn = document.getElementById("prevPage");
+    const nextPageBtn = document.getElementById("nextPage");
+    const exportCsvBtn = document.getElementById("exportCsv");
+
+    const COLUMNS = [
+      {key:"id", label:"ID"},
+      {key:"name", label:"Title"},
+      {key:"company", label:"Company"},
+      {key:"country", label:"Country"},
+      {key:"count", label:"Count"},
+      {key:"salary", label:"Salary"},
+      {key:"experience", label:"Exp"},
+      {key:"lat", label:"Lat"},
+      {key:"lon", label:"Lon"}
+    ];
+
+    let sortKey = "name";
+    let sortAsc = true;
+    let page = 1;
+
+    function toggleDrawer(open){
+      drawer.classList.toggle("open", open ?? !drawer.classList.contains("open"));
+      drawer.setAttribute("aria-hidden", drawer.classList.contains("open") ? "false" : "true");
+    }
+
+    function currentFeatureList(){
+      const useFiltered = tableFilteredToggle.checked;
+      return (useFiltered ? (filtered?.features||[]) : (rawData?.features||[]));
+    }
+
+    function rowsFromFeatures(features){
+      return features.map(f => ({
+        id: f.properties.id,
+        name: f.properties.name,
+        company: f.properties.company,
+        country: f.properties.country,
+        count: Number(f.properties.count ?? 0),
+        salary: Number(f.properties.salary ?? 0),
+        experience: Number(f.properties.experience ?? 0),
+        lat: Number(f.geometry.coordinates[1]),
+        lon: Number(f.geometry.coordinates[0]),
+        _coords: f.geometry.coordinates
+      }));
+    }
+
+    function updateTable(){
+      const size = Number(rowsPerPageSel.value || 100);
+      let rows = rowsFromFeatures(currentFeatureList());
+
+      // sorting
+      rows.sort((a,b)=>{
+        const va=a[sortKey], vb=b[sortKey];
+        if(va==null && vb==null) return 0;
+        if(va==null) return 1;
+        if(vb==null) return -1;
+        if(typeof va==="number" && typeof vb==="number") return sortAsc ? va-vb : vb-va;
+        return sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+      });
+
+      const total = rows.length;
+      const totalPages = Math.max(1, Math.ceil(total/size));
+      if(page>totalPages) page=totalPages;
+      const start = (page-1)*size, end = start+size;
+      const pageRows = rows.slice(start,end);
+
+      // header
+      tableHead.innerHTML = "<tr>" + COLUMNS.map(c=>`<th data-key="${c.key}">${c.label}${sortKey===c.key ? (sortAsc ? " ▲" : " ▼") : ""}</th>`).join("") + "</tr>";
+      // body
+      tableBody.innerHTML = pageRows.map(r =>
+        `<tr class="hover:bg-black/20 cursor-pointer" data-center="${r._coords}">
+          <td>${r.id ?? ""}</td>
+          <td title="${r.name??""}">${r.name??""}</td>
+          <td title="${r.company??""}">${r.company??""}</td>
+          <td>${r.country??""}</td>
+          <td>${r.count??""}</td>
+          <td>${r.salary? "€"+fmt(r.salary):""}</td>
+          <td>${r.experience??""}</td>
+          <td>${r.lat?.toFixed?.(4) ?? ""}</td>
+          <td>${r.lon?.toFixed?.(4) ?? ""}</td>
+        </tr>`
+      ).join("");
+
+      pageInfo.textContent = `${page} / ${totalPages}`;
+      tableCount.textContent = `(${fmt(total)} rows)`;
+
+      // header sort clicks
+      [...tableHead.querySelectorAll("th")].forEach(th=>{
+        th.onclick = ()=>{
+          const k = th.dataset.key;
+          if(k === sortKey) sortAsc = !sortAsc; else { sortKey = k; sortAsc = true; }
+          updateTable();
+        };
+      });
+
+      // row click → fly to
+      [...tableBody.querySelectorAll("tr")].forEach(tr=>{
+        tr.onclick = ()=>{
+          const center = tr.getAttribute("data-center").split(",").map(Number);
+          if(center.length===2 && Number.isFinite(center[0])) map.flyTo({ center, zoom: 10, essential: true });
+        };
+      });
+    }
+
+    prevPageBtn.onclick = ()=>{ page = Math.max(1, page-1); updateTable(); };
+    nextPageBtn.onclick = ()=>{ page = page+1; updateTable(); };
+    rowsPerPageSel.onchange = ()=>{ page = 1; updateTable(); };
+    tableFilteredToggle.onchange = ()=>{ page = 1; updateTable(); };
+    exportCsvBtn.onclick = ()=>{
+      const rows = rowsFromFeatures(currentFeatureList());
+      const header = COLUMNS.map(c=>c.label).join(",");
+      const csv = [header, ...rows.map(r => [r.id,r.name,r.company,r.country,r.count,r.salary,r.experience,r.lat,r.lon].map(v=>{
+        if(v==null) return "";
+        const s=String(v).replace(/"/g,'""');
+        return /[",\n]/.test(s) ? `"${s}"` : s;
+      }).join(","))].join("\n");
+      const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href=url; a.download="jobs.csv"; a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    toggleTableBtn.onclick = ()=> toggleDrawer();
+    closeDrawer.onclick = ()=> toggleDrawer(false);
+    window.addEventListener("keydown", (e)=>{ if(e.key.toLowerCase()==="t") toggleDrawer(); if(e.key==="Escape") toggleDrawer(false); });
+
     // init
     map.on("load", ()=>{
       rawData = generateSampleData();
       applyFilters();
       refreshScatter();
       if(filtered.features.length) fitTo(filtered,100);
+      updateTable();
     });
 
     feather.replace();
