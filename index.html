@@ -21,7 +21,7 @@
     #map { position:absolute; inset:0; }
     .bg-panel{ background:var(--panel); } .text-muted{ color:var(--muted); } .border-stroke{ border-color:var(--stroke); } .bg-accent{ background:var(--accent); }
     .outline-focus:focus{ outline:2px solid var(--accent); outline-offset:2px; }
-    .sidebar{ position:absolute; inset:0 auto 0 0; width:340px; z-index:10; box-shadow:2px 0 12px rgba(0,0,0,.35); }
+    .sidebar{ position:absolute; inset:0 auto 0 0; width:360px; z-index:10; box-shadow:2px 0 12px rgba(0,0,0,.35); }
     .legend { display:flex; height:16px; border-radius:6px; overflow:hidden; border:1px solid var(--stroke); }
     .tooltip { position:absolute; z-index:50; pointer-events:none; background:var(--panel); border:1px solid var(--stroke); border-radius:10px; padding:10px; font-size:13px; max-width:280px; transform:translate(10px,-10px); }
     .region-btn{ background:var(--panel); border:1px solid var(--stroke); color:var(--muted); padding:6px 12px; border-radius:8px; cursor:pointer; font-size:13px; }
@@ -31,13 +31,15 @@
     input[type="file"]{ display:none; }
 
     /* bottom data table drawer */
-    .data-drawer{ position:fixed; left:0; right:0; bottom:0; height:40vh; background:var(--panel); border-top:1px solid var(--stroke); transform:translateY(100%); transition:transform .25s ease; z-index:40; display:flex; flex-direction:column; }
+    .data-drawer{ position:fixed; left:0; right:0; bottom:0; height:42vh; background:var(--panel); border-top:1px solid var(--stroke); transform:translateY(100%); transition:transform .25s ease; z-index:40; display:flex; flex-direction:column; }
     .data-drawer.open{ transform:translateY(0); }
     .drawer-header{ display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.5rem .75rem; border-bottom:1px solid var(--stroke); }
     .drawer-body{ overflow:auto; height:100%; }
     table.data{ width:100%; border-collapse:collapse; font-size:12px; }
     table.data thead th{ position:sticky; top:0; background:#0F1115; border-bottom:1px solid var(--stroke); text-align:left; padding:.5rem .6rem; cursor:pointer; }
-    table.data tbody td{ border-bottom:1px solid var(--stroke); padding:.45rem .6rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    table.data tbody td{ border-bottom:1px solid var(--stroke); padding:.4rem .6rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    table.data td[contenteditable="true"]{ outline:1px dashed transparent; }
+    table.data td[contenteditable="true"]:focus{ outline:1px dashed var(--accent); background:#0c0f18; }
     .toolbar{ display:flex; align-items:center; gap:.5rem; }
     .btn{ background:var(--panel); border:1px solid var(--stroke); padding:.35rem .6rem; border-radius:.5rem; font-size:.8rem; cursor:pointer; color:var(--text); }
     .btn.primary{ background:var(--accent); border-color:transparent; color:white; }
@@ -76,6 +78,15 @@
 
           <div class="mt-3 grid grid-cols-1 gap-3">
             <div>
+              <label class="text-sm text-muted">Renderer</label>
+              <select id="rendererSelect" class="mt-1 w-full bg-panel border border-stroke rounded-md px-3 py-2 outline-focus">
+                <option value="clusters" selected>Clusters / Points</option>
+                <option value="heatmap">Heatmap</option>
+                <option value="hexgrid">Hex grid (Vector enrichment)</option>
+              </select>
+            </div>
+
+            <div>
               <label class="text-sm text-muted">Color based on</label>
               <select id="attrSelect" class="mt-1 w-full bg-panel border border-stroke rounded-md px-3 py-2 outline-focus">
                 <option value="count">count</option>
@@ -104,7 +115,7 @@
               </div>
               <div>
                 <label class="text-sm text-muted">Opacity</label>
-                <input id="opacityRange" type="range" min="30" max="100" value="75" class="w-full"/>
+                <input id="opacityRange" type="range" min="30" max="100" value="85" class="w-full"/>
               </div>
             </div>
 
@@ -119,12 +130,11 @@
       <!-- Paste data -->
       <section class="bg-panel border border-stroke rounded-2xl p-4">
         <h2 class="font-semibold mb-2">Paste Job Data</h2>
-        <p class="text-muted text-sm mb-3">Paste CSV/TSV from Excel/Sheets. Use columns like: <code>title</code>, <code>company</code>, <code>country</code>, <code>salary</code>, <code>experience</code>, and either <code>lat/lon</code> or a <code>location</code> text.</p>
+        <p class="text-muted text-sm mb-3">Paste CSV/TSV from Excel/Sheets. Must include <code>lat/lon</code>, or a geocodable <code>location</code>. Optional: <code>title</code>, <code>company</code>, <code>country</code>, <code>salary</code>, <code>experience</code>, <code>type</code>, <code>date</code>.</p>
 
         <textarea id="jobDataInput" class="w-full h-32 bg-panel border border-stroke rounded-md px-3 py-2 outline-focus"
-          placeholder="Example:
-title,company,location,country,salary,experience
-SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
+          placeholder="title,company,location,country,salary,experience,type,date
+SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3,Hybrid,2025-03-05"></textarea>
 
         <div class="grid grid-cols-2 gap-3 mt-3 mb-3">
           <div>
@@ -170,7 +180,7 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
   </aside>
 
   <!-- Region buttons -->
-  <div class="absolute top-4 left-[360px] z-10 flex gap-2">
+  <div class="absolute top-4 left-[380px] z-10 flex gap-2">
     <button class="region-btn active" data-region="fit">Fit to Data</button>
     <button class="region-btn" data-region="europe">Europe</button>
     <button class="region-btn" data-region="nl">Netherlands</button>
@@ -180,7 +190,7 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
   <div id="map"></div>
   <div id="tooltip" class="tooltip" style="display:none;"></div>
 
-  <!-- DATA TABLE DRAWER -->
+  <!-- DATA TABLE DRAWER (editable) -->
   <div id="dataDrawer" class="data-drawer" aria-hidden="true">
     <div class="drawer-header">
       <div class="toolbar">
@@ -216,16 +226,16 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
       STYLE_URL: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
       PALETTE: ["#6C1D6B","#9C2C7A","#D4475D","#F07E2E","#FFA600"],
       ATTR_DEFAULT: "count",
-      CLUSTER_RADIUS: 60,           // px
-      CLUSTER_MAX_ZOOM: 14          // stop clustering after this zoom
+      CLUSTER_RADIUS: 60, CLUSTER_MAX_ZOOM: 14,
+      HEX_CELL_KM: 8
     };
 
     // ---------- utils ----------
     const hexToRgb = h => { const m=h.replace("#",""); return [parseInt(m.slice(0,2),16),parseInt(m.slice(2,4),16),parseInt(m.slice(4,6),16)]; };
+    const fmt=n=> new Intl.NumberFormat().format(n);
     const quantiles = (arr,k)=>{ const a=[...arr].sort((x,y)=>x-y),q=[]; for(let i=1;i<k;i++){ const p=i/k,idx=(a.length-1)*p,lo=Math.floor(idx),hi=Math.ceil(idx); q.push(lo===hi?a[lo]:a[lo]+(a[hi]-a[lo])*(idx-lo)); } return q; };
     const equalBreaks=(arr,k)=>{ const min=Math.min(...arr),max=Math.max(...arr),step=(max-min)/k,b=[]; for(let i=1;i<k;i++) b.push(min+step*i); return b; };
     const classify=(v,br)=>{ for(let i=0;i<br.length;i++) if(v<=br[i]) return i; return br.length; };
-    const fmt=n=> new Intl.NumberFormat().format(n);
 
     // ---------- map ----------
     const map = new maplibregl.Map({ container:"map", style: CONFIG.STYLE_URL, center:[5.3,52.2], zoom:6.2, attributionControl:true });
@@ -234,155 +244,177 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
 
     // ---------- state ----------
     let rawData=null, filtered=null, breaks=null, activeAttr=CONFIG.ATTR_DEFAULT;
-    let currentMode = "map"; // 'map' | 'eo' | 've'
+    let currentRenderer = "clusters"; // clusters | heatmap | hexgrid
     const layerModeLabel = document.getElementById("layerModeLabel");
 
-    // ---------- sample data ----------
+    // ---------- sample data with Job Type + Date ----------
     function generateSampleData(){
-      const jobLocations = [
-        { city: "Amsterdam", company: "Leaseweb", lat: 52.3667, lon: 4.8945, job: "SAP Functional Application Manager" },
-        { city: "Amsterdam", company: "Deloitte",  lat: 52.3667, lon: 4.8945, job: "Junior SAP Consultant" },
-        { city: "Lieshout",  company: "Royal Swinkels", lat: 51.5194, lon: 5.5958, job: "Junior SAP Application Manager" },
-        { city: "Utrecht",   company: "Billennium", lat: 52.0907, lon: 5.1214, job: "SAP Consultant (Remote)" },
-        { city: "Eindhoven", company: "SixteenFifty", lat: 51.4416, lon: 5.4697, job: "SAP MM Support Consultant" }
+      const rows = [
+        { city:"Amsterdam",  company:"Leaseweb",    lat:52.3667, lon:4.8945, job:"SAP Functional Application Manager", type:"Hybrid",  date:"2025-03-03", salary:89582, exp:2 },
+        { city:"Amsterdam",  company:"Deloitte",    lat:52.3667, lon:4.8945, job:"Junior SAP Consultant",             type:"On-site", date:"2025-03-07", salary:65754, exp:3 },
+        { city:"Lieshout",   company:"Royal Swinkels", lat:51.5194, lon:5.5958, job:"Junior SAP Application Manager", type:"On-site", date:"2025-03-02", salary:89834, exp:2 },
+        { city:"Utrecht",    company:"Billennium",  lat:52.0907, lon:5.1214, job:"SAP Consultant (Remote)",           type:"Remote",  date:"2025-03-01", salary:68849, exp:3 },
+        { city:"Eindhoven",  company:"SixteenFifty",lat:51.4416, lon:5.4697, job:"SAP MM Support Consultant",          type:"Hybrid",  date:"2025-03-06", salary:72918, exp:3 }
       ];
-      return { type:"FeatureCollection", features: jobLocations.map((loc,i)=>({
+      return { type:"FeatureCollection", features: rows.map((r,i)=>({
         type:"Feature",
-        geometry:{ type:"Point", coordinates:[loc.lon,loc.lat] },
-        properties:{ id:i, name:loc.job, company:loc.company, country:"NL", count:1, salary: 60000+((Math.random()*30000)|0), experience: 2+((Math.random()*3)|0) }
+        geometry:{ type:"Point", coordinates:[r.lon,r.lat] },
+        properties:{
+          id:i, name:r.job, company:r.company, country:"NL",
+          count:1, salary:r.salary, experience:r.exp,
+          type:r.type, date:r.date
+        }
       }))};
     }
 
-    // ---------- Deck.gl layers for VE ----------
-    function buildHexLayer(){
-      return new deck.HexagonLayer({
-        id:"jobs-hex",
-        data: filtered.features,
-        getPosition:d=>d.geometry.coordinates,
-        radius:5000, extruded:false,
-        colorRange: CONFIG.PALETTE.map(h=>[...hexToRgb(h),220]),
-        getColorWeight:d=>Number(d.properties[activeAttr])||1,
-        colorAggregation:"SUM",
-        pickable:true,
-        onHover: ({x,y,object})=>{
-          const t=document.getElementById("tooltip");
-          if(object){ t.style.display="block"; t.style.left=x+"px"; t.style.top=y+"px"; t.innerHTML=`<div class="font-semibold">Jobs in cell: ${object.points.length}</div>`; }
-          else t.style.display="none";
-        }
-      });
+    // ---------- cluster / heatmap / point layers ----------
+    const SRC = "jobsSrc";
+    const L_CLUSTER = "cluster-circles";
+    const L_CLUSTER_TXT = "cluster-text";
+    const L_POINTS = "points";
+    const L_HEAT = "heat";
+
+    function paletteStepExpression(valueExpr){
+      // build a step() with current breaks & palette
+      const steps = ["step", valueExpr, CONFIG.PALETTE[0]];
+      for(let i=0;i<breaks.length;i++){
+        steps.push(breaks[i], CONFIG.PALETTE[i+1]);
+      }
+      return steps;
     }
 
-    // ---------- clustering layers for Map/EO ----------
-    const CLUSTER_SOURCE = "jobs-cluster-src";
-    const L_CLUSTER_CIRCLES = "jobs-cluster-circles";
-    const L_CLUSTER_COUNT   = "jobs-cluster-count";
-    const L_UNCLUSTERED     = "jobs-unclustered";
-
-    function ensureClusterLayers(){
-      if(map.getSource(CLUSTER_SOURCE)) return;
-
-      map.addSource(CLUSTER_SOURCE, {
-        type: "geojson",
-        data: {type:"FeatureCollection", features:[]},
-        cluster: true,
-        clusterRadius: CONFIG.CLUSTER_RADIUS,
-        clusterMaxZoom: CONFIG.CLUSTER_MAX_ZOOM
-      });
-
-      // color thresholds similar to your screenshot
-      const colorByCount = [
-        "step", ["get","point_count"],
-        "#2b7bff",     // 0-9
-        10, "#3aa0ff", // 10-29
-        30, "#ffd166", // 30-69
-        70, "#ff8c42", // 70-99
-        100, "#ff4d4d" // 100+
-      ];
-      const radiusByCount = [
-        "step", ["get","point_count"],
-        14,      // <=9
-        10, 18,  // <=29
-        30, 22,  // <=69
-        70, 28,  // <=99
-        100, 34  // 100+
-      ];
-
-      map.addLayer({
-        id: L_CLUSTER_CIRCLES,
-        type: "circle",
-        source: CLUSTER_SOURCE,
-        filter: ["has","point_count"],
-        paint: {
-          "circle-color": colorByCount,
-          "circle-radius": radiusByCount,
-          "circle-opacity": 0.9,
-          "circle-stroke-color": "#0F1115",
-          "circle-stroke-width": 2
-        }
-      });
-
-      map.addLayer({
-        id: L_CLUSTER_COUNT,
-        type: "symbol",
-        source: CLUSTER_SOURCE,
-        filter: ["has","point_count"],
-        layout: {
-          "text-field": ["get","point_count"],
-          "text-size": 12
-        },
-        paint: { "text-color": "#ffffff" }
-      });
-
-      map.addLayer({
-        id: L_UNCLUSTERED,
-        type: "circle",
-        source: CLUSTER_SOURCE,
-        filter: ["!", ["has", "point_count"]],
-        paint: {
-          "circle-color": "#ffa600",
-          "circle-radius": 6,
-          "circle-opacity": 0.85,
-          "circle-stroke-color": "#0F1115",
-          "circle-stroke-width": 1.5
-        }
-      });
-
-      // click cluster → zoom in
-      map.on("click", L_CLUSTER_CIRCLES, e=>{
-        const feature = e.features?.[0];
-        if(!feature) return;
-        const src = map.getSource(CLUSTER_SOURCE);
-        src.getClusterExpansionZoom(feature.properties.cluster_id, (err, zoom)=>{
-          if(err) return;
-          map.easeTo({ center: feature.geometry.coordinates, zoom });
+    function ensureSourceAndLayers(){
+      if(!map.getSource(SRC)){
+        map.addSource(SRC, {
+          type:"geojson",
+          data:{type:"FeatureCollection", features:[]},
+          cluster:true, clusterRadius:CONFIG.CLUSTER_RADIUS, clusterMaxZoom:CONFIG.CLUSTER_MAX_ZOOM,
+          // aggregate sums for properties so we can color clusters by avg salary/exp, etc.
+          clusterProperties:{
+            sum_salary: ["+", ["accumulated"], ["to-number", ["get","salary"]]],
+            sum_experience: ["+", ["accumulated"], ["to-number", ["get","experience"]]],
+            sum_count: ["+", ["accumulated"], ["to-number", ["get","count"]]]
+          }
         });
-      });
 
-      // click unclustered → fly to point
-      map.on("click", L_UNCLUSTERED, e=>{
-        const f=e.features?.[0]; if(!f) return;
-        map.flyTo({ center: f.geometry.coordinates, zoom: 10, essential: true });
-      });
+        // clustered bubbles
+        map.addLayer({
+          id:L_CLUSTER, type:"circle", source:SRC, filter:["has","point_count"],
+          paint:{
+            "circle-color": ["case",
+              ["==", ["var","mode"], "salary"], paletteStepExpression(["/", ["get","sum_salary"], ["get","point_count"]]),
+              ["==", ["var","mode"], "experience"], paletteStepExpression(["/", ["get","sum_experience"], ["get","point_count"]]),
+              // default count
+              paletteStepExpression(["get","point_count"])
+            ],
+            "circle-radius": ["interpolate", ["linear"], ["get","point_count"], 1, 14, 100, 34],
+            "circle-opacity": 0.9,
+            "circle-stroke-color":"#0F1115","circle-stroke-width":2
+          }
+        }, undefined, {"mode": activeAttr});
 
-      map.on("mouseenter", L_CLUSTER_CIRCLES, ()=> map.getCanvas().style.cursor="pointer");
-      map.on("mouseleave", L_CLUSTER_CIRCLES, ()=> map.getCanvas().style.cursor="");
-      map.on("mouseenter", L_UNCLUSTERED, ()=> map.getCanvas().style.cursor="pointer");
-      map.on("mouseleave", L_UNCLUSTERED, ()=> map.getCanvas().style.cursor="");
+        map.addLayer({
+          id:L_CLUSTER_TXT, type:"symbol", source:SRC, filter:["has","point_count"],
+          layout:{ "text-field":["to-string",["get","point_count"]], "text-size":12 },
+          paint:{ "text-color":"#fff" }
+        });
+
+        // individual points
+        map.addLayer({
+          id:L_POINTS, type:"circle", source:SRC, filter:["!",["has","point_count"]],
+          paint:{
+            "circle-color": ["case",
+              ["==", ["var","mode"], "salary"], paletteStepExpression(["to-number",["get","salary"]]),
+              ["==", ["var","mode"], "experience"], paletteStepExpression(["to-number",["get","experience"]]),
+              paletteStepExpression(["to-number",["get","count"]])
+            ],
+            "circle-radius": ["to-number", ["var","ptRadius"], 6],
+            "circle-opacity": ["to-number", ["var","ptOpacity"], 0.85],
+            "circle-stroke-color":"#0F1115","circle-stroke-width":1.5
+          }
+        }, undefined, {"mode": activeAttr, "ptRadius": +document.getElementById("radiusRange").value, "ptOpacity": +document.getElementById("opacityRange").value/100 });
+
+        // popups on points
+        map.on("click", L_POINTS, e=>{
+          const f = e.features?.[0]; if(!f) return;
+          const p = f.properties;
+          new maplibregl.Popup({closeOnMove:true, offset:12})
+            .setLngLat(f.geometry.coordinates)
+            .setHTML(`
+              <div style="min-width:220px">
+                <div class="font-semibold mb-1">${p.name}</div>
+                <div class="text-xs text-muted mb-1">${p.company}</div>
+                <div class="text-sm">Jobs: <b>${p.count}</b> · Salary: <b>€${fmt(+p.salary||0)}</b> · Exp: <b>${p.experience}y</b></div>
+                <div class="text-sm">Type: <b>${p.type||""}</b> · Date: <b>${p.date||""}</b></div>
+                <div class="text-[11px] text-muted mt-1">${f.geometry.coordinates[1].toFixed(4)}, ${f.geometry.coordinates[0].toFixed(4)}</div>
+              </div>`)
+            .addTo(map);
+        });
+
+        // click cluster -> fit ALL leaves so they are dispersed and visible
+        map.on("click", L_CLUSTER, e=>{
+          const feat = e.features?.[0]; if(!feat) return;
+          const src = map.getSource(SRC);
+          src.getClusterLeaves(feat.properties.cluster_id, Infinity, 0, (err, leaves)=>{
+            if(err || !leaves?.length) return;
+            const fc = { type:"FeatureCollection", features: leaves };
+            const bbox = turf.bbox(fc);
+            map.fitBounds([[bbox[0],bbox[1]],[bbox[2],bbox[3]]], { padding: 120, duration: 600, maxZoom: 18 });
+          });
+        });
+
+        map.on("mouseenter", L_CLUSTER, ()=> map.getCanvas().style.cursor="pointer");
+        map.on("mouseleave", L_CLUSTER, ()=> map.getCanvas().style.cursor="");
+        map.on("mouseenter", L_POINTS, ()=> map.getCanvas().style.cursor="pointer");
+        map.on("mouseleave", L_POINTS, ()=> map.getCanvas().style.cursor="");
+      }
+
+      // heatmap layer
+      if(!map.getLayer(L_HEAT)){
+        map.addLayer({
+          id: L_HEAT, type: "heatmap", source: SRC,
+          paint: {
+            "heatmap-radius": 30,
+            "heatmap-opacity": 0.9,
+            "heatmap-intensity": 1.2,
+            "heatmap-weight": ["case",
+              ["==", ["var","mode"], "salary"], ["interpolate", ["linear"], ["to-number",["get","salary"]], breaks[0], 0.1, breaks.at(-1), 1],
+              ["==", ["var","mode"], "experience"], ["interpolate", ["linear"], ["to-number",["get","experience"]], breaks[0], 0.1, breaks.at(-1), 1],
+              // count weight defaults to 1 per point
+              1
+            ],
+            "heatmap-color": [
+              "interpolate", ["linear"], ["heatmap-density"],
+              0, "rgba(0,0,0,0)",
+              0.2, "#2b7bff",
+              0.4, "#3aa0ff",
+              0.6, "#ffd166",
+              0.8, "#ff8c42",
+              1, "#ff4d4d"
+            ]
+          }
+        }, L_POINTS, {"mode": activeAttr});
+        map.setLayoutProperty(L_HEAT, "visibility", "none");
+      }
     }
 
-    function updateClusterData(fc){
-      ensureClusterLayers();
-      const src = map.getSource(CLUSTER_SOURCE);
-      if(src) src.setData(fc);
+    function updateSourceData(fc){ if(map.getSource(SRC)) map.getSource(SRC).setData(fc); }
+
+    function setLayerVisibility(renderer){
+      currentRenderer = renderer;
+      layerModeLabel.textContent = renderer === "clusters" ? "Clusters / Points" : renderer === "heatmap" ? "Heatmap" : "Hex grid (labels)";
+      const vis = (id, show)=>{ if(map.getLayer(id)) map.setLayoutProperty(id, "visibility", show?"visible":"none"); };
+      if(renderer==="clusters"){
+        vis(L_HEAT,false); vis(L_CLUSTER,true); vis(L_CLUSTER_TXT,true); vis(L_POINTS,true); deckOverlay.setProps({layers:[]});
+      } else if(renderer==="heatmap"){
+        vis(L_HEAT,true); vis(L_CLUSTER,false); vis(L_CLUSTER_TXT,false); vis(L_POINTS,false); deckOverlay.setProps({layers:[]});
+      } else { // hexgrid via deck.gl
+        vis(L_HEAT,false); vis(L_CLUSTER,false); vis(L_CLUSTER_TXT,false); vis(L_POINTS,false);
+        renderHexGrid();
+      }
     }
 
-    function showClusterLayers(show){
-      [L_CLUSTER_CIRCLES, L_CLUSTER_COUNT, L_UNCLUSTERED].forEach(id=>{
-        if(map.getLayer(id)) map.setLayoutProperty(id, "visibility", show ? "visible" : "none");
-      });
-    }
-
-    // ---------- classification / filters / table ----------
+    // ---------- classification / filters ----------
     function recomputeColoring(){
       const vals = filtered.features.map(f=>Number(f.properties[activeAttr])).filter(Number.isFinite);
       if(vals.length===0){ breaks=[0,0,0,0]; return; }
@@ -391,6 +423,25 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
       document.getElementById("legendRamp").innerHTML = CONFIG.PALETTE.map(c=>`<div style="flex:1;background:${c}"></div>`).join("");
       const labs=[Math.min(...vals),...breaks,Math.max(...vals)];
       document.getElementById("legendLabels").innerHTML = `<span>${fmt(Math.round(labs[0]))}</span><span>${fmt(Math.round(labs.at(-1)))}</span>`;
+
+      // update style variables so circle/heatmap can react
+      map.setLayerZoomRange?.(L_POINTS, 0, 24);
+      // re-apply style variables used in paint via runtime styling vars
+      map.setPaintProperty(L_POINTS, "circle-color", ["case",
+        ["==", ["var","mode"], "salary"], paletteStepExpression(["to-number",["get","salary"]]),
+        ["==", ["var","mode"], "experience"], paletteStepExpression(["to-number",["get","experience"]]),
+        paletteStepExpression(["to-number",["get","count"]])
+      ]);
+      map.setPaintProperty(L_CLUSTER, "circle-color", ["case",
+        ["==", ["var","mode"], "salary"], paletteStepExpression(["/", ["get","sum_salary"], ["get","point_count"]]),
+        ["==", ["var","mode"], "experience"], paletteStepExpression(["/", ["get","sum_experience"], ["get","point_count"]]),
+        paletteStepExpression(["get","point_count"])
+      ]);
+      map.setPaintProperty(L_HEAT, "heatmap-weight", ["case",
+        ["==", ["var","mode"], "salary"], ["interpolate", ["linear"], ["to-number",["get","salary"]], breaks[0], 0.1, breaks.at(-1), 1],
+        ["==", ["var","mode"], "experience"], ["interpolate", ["linear"], ["to-number",["get","experience"]], breaks[0], 0.1, breaks.at(-1), 1],
+        1
+      ]);
     }
 
     function applyFilters(){
@@ -404,7 +455,46 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
       })};
     }
 
-    // table drawer state
+    // ---------- hex grid (vector enrichment) with labels ----------
+    function renderHexGrid(){
+      if(!filtered?.features?.length){ deckOverlay.setProps({layers:[]}); return; }
+      const bbox = turf.bbox(filtered);
+      const grid = turf.hexGrid(bbox, CONFIG.HEX_CELL_KM, {units:"kilometers"});
+      const pts = turf.featureCollection(filtered.features.map(f=>turf.point(f.geometry.coordinates, f.properties)));
+      const bins = [];
+      grid.features.forEach((cell, idx)=>{
+        const inside = turf.pointsWithinPolygon(pts, cell);
+        const count = inside.features.length;
+        if(count>0){
+          cell.properties.count = count;
+          bins.push(cell);
+        }
+      });
+      const fc = turf.featureCollection(bins);
+      // color scale by count
+      const getColor = f=>{
+        const cls = classify(f.properties.count, breaksForCounts(fc));
+        const [r,g,b] = hexToRgb(CONFIG.PALETTE[cls]); return [r,g,b,220];
+      };
+      function breaksForCounts(fc){
+        const arr = fc.features.map(f=>f.properties.count);
+        if(arr.length===0) return [0,0,0,0];
+        return quantiles(arr, CONFIG.PALETTE.length);
+      }
+      const polyLayer = new deck.GeoJsonLayer({
+        id:"hex-polys", data: fc, stroked:false, filled:true, pickable:true,
+        getFillColor: getColor, opacity: +document.getElementById("opacityRange").value/100
+      });
+      const labelData = fc.features.map(f=>({ position: turf.centroid(f).geometry.coordinates, label: String(f.properties.count) }));
+      const textLayer = new deck.TextLayer({
+        id:"hex-labels", data: labelData, pickable:false,
+        getPosition: d=>d.position, getText: d=>d.label, getSize: 16, getColor:[255,255,255,255],
+        getTextAnchor:'middle', getAlignmentBaseline:'center'
+      });
+      deckOverlay.setProps({ layers:[polyLayer, textLayer] });
+    }
+
+    // ---------- table (editable) ----------
     const drawer = document.getElementById("dataDrawer");
     const toggleTableBtn = document.getElementById("toggleTableBtn");
     const closeDrawer = document.getElementById("closeDrawer");
@@ -419,21 +509,23 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
     const exportCsvBtn = document.getElementById("exportCsv");
 
     const COLUMNS = [
-      {key:"id", label:"ID"},
-      {key:"name", label:"Title"},
-      {key:"company", label:"Company"},
-      {key:"country", label:"Country"},
-      {key:"count", label:"Count"},
-      {key:"salary", label:"Salary"},
-      {key:"experience", label:"Exp"},
-      {key:"lat", label:"Lat"},
-      {key:"lon", label:"Lon"}
+      {key:"id", label:"ID", edit:false},
+      {key:"name", label:"Title", edit:true},
+      {key:"company", label:"Company", edit:true},
+      {key:"country", label:"Country", edit:true},
+      {key:"count", label:"Count", edit:true},
+      {key:"salary", label:"Salary", edit:true},
+      {key:"experience", label:"Exp", edit:true},
+      {key:"type", label:"Type", edit:true},
+      {key:"date", label:"Date", edit:true},
+      {key:"lat", label:"Lat", edit:true},
+      {key:"lon", label:"Lon", edit:true}
     ];
     let sortKey="name", sortAsc=true, page=1;
 
     function toggleDrawer(open){ drawer.classList.toggle("open", open ?? !drawer.classList.contains("open")); drawer.setAttribute("aria-hidden", drawer.classList.contains("open")?"false":"true"); }
     function currentFeatureList(){ return (tableFilteredToggle.checked ? (filtered?.features||[]) : (rawData?.features||[])); }
-    function rowsFromFeatures(features){ return features.map(f=>({ id:f.properties.id, name:f.properties.name, company:f.properties.company, country:f.properties.country, count:+(f.properties.count||0), salary:+(f.properties.salary||0), experience:+(f.properties.experience||0), lat:+f.geometry.coordinates[1], lon:+f.geometry.coordinates[0], _coords:f.geometry.coordinates })); }
+    function rowsFromFeatures(features){ return features.map(f=>({ id:f.properties.id, name:f.properties.name, company:f.properties.company, country:f.properties.country, count:+(f.properties.count||0), salary:+(f.properties.salary||0), experience:+(f.properties.experience||0), type:f.properties.type||"", date:f.properties.date||"", lat:+f.geometry.coordinates[1], lon:+f.geometry.coordinates[0], _f:f })); }
 
     function updateTable(){
       const size = Number(rowsPerPageSel.value||100);
@@ -442,14 +534,56 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
       const total = rows.length; const totalPages=Math.max(1,Math.ceil(total/size)); if(page>totalPages) page=totalPages;
       const start=(page-1)*size, end=start+size, pageRows=rows.slice(start,end);
       tableHead.innerHTML = "<tr>"+COLUMNS.map(c=>`<th data-key="${c.key}">${c.label}${sortKey===c.key?(sortAsc?" ▲":" ▼"):""}</th>`).join("")+"</tr>";
-      tableBody.innerHTML = pageRows.map(r=>`<tr class="hover:bg-black/20 cursor-pointer" data-center="${r._coords}">
-          <td>${r.id??""}</td><td title="${r.name??""}">${r.name??""}</td><td title="${r.company??""}">${r.company??""}</td>
-          <td>${r.country??""}</td><td>${r.count??""}</td><td>${r.salary? "€"+fmt(r.salary):""}</td><td>${r.experience??""}</td>
-          <td>${r.lat?.toFixed?.(4)??""}</td><td>${r.lon?.toFixed?.(4)??""}</td></tr>`).join("");
+      tableBody.innerHTML = pageRows.map(r=>{
+        return `<tr data-id="${r.id}">
+          ${COLUMNS.map(c=>{
+            const val = c.key==="salary" ? (r.salary?`€${fmt(r.salary)}`:"") :
+                        c.key==="lat" ? (isFinite(r.lat)? r.lat.toFixed(4) : "") :
+                        c.key==="lon" ? (isFinite(r.lon)? r.lon.toFixed(4) : "") : (r[c.key]??"");
+            const editable = c.edit ? 'contenteditable="true"' : '';
+            return `<td data-key="${c.key}" ${editable}>${val}</td>`;
+          }).join("")}
+        </tr>`;
+      }).join("");
       pageInfo.textContent = `${page} / ${totalPages}`; tableCount.textContent = `(${fmt(total)} rows)`;
+
+      // sort click
       [...tableHead.querySelectorAll("th")].forEach(th=> th.onclick=()=>{ const k=th.dataset.key; if(k===sortKey) sortAsc=!sortAsc; else {sortKey=k; sortAsc=true;} updateTable(); });
-      [...tableBody.querySelectorAll("tr")].forEach(tr=> tr.onclick=()=>{ const center=tr.getAttribute("data-center").split(",").map(Number); if(center.length===2) map.flyTo({ center, zoom:10, essential:true }); });
+
+      // edit handlers (blur to commit)
+      tableBody.addEventListener("blur", onCellEdit, true);
+
+      // row click -> fly
+      [...tableBody.querySelectorAll("tr")].forEach(tr=>{
+        tr.addEventListener("click", (ev)=>{
+          if(ev.target.getAttribute("contenteditable")==="true") return;
+          const id = +tr.getAttribute("data-id");
+          const feat = (rawData?.features||[]).find(f=>f.properties.id===id);
+          if(feat) map.flyTo({ center: feat.geometry.coordinates, zoom: 10 });
+        });
+      });
     }
+
+    function onCellEdit(ev){
+      const td = ev.target.closest("td"); if(!td) return;
+      const tr = td.parentElement; const id = +tr.getAttribute("data-id");
+      const key = td.getAttribute("data-key"); if(!key) return;
+      const f = (rawData?.features||[]).find(x=>x.properties.id===id); if(!f) return;
+
+      let val = td.textContent.trim();
+      if(key==="salary" || key==="count" || key==="experience"){ val = Number(String(val).replace(/[^\d.-]/g,"")) || 0; f.properties[key]=val; }
+      else if(key==="lat" || key==="lon"){
+        const num = Number(val); if(isFinite(num)){
+          const c = f.geometry.coordinates.slice();
+          if(key==="lat") f.geometry.coordinates = [c[0], num]; else f.geometry.coordinates = [num, c[1]];
+        }
+      } else { f.properties[key] = val; }
+      // re-apply filters/visuals
+      applyFilters(); updateSourceData(filtered);
+      if(currentRenderer==="hexgrid") renderHexGrid();
+      recomputeColoring(); updateTable();
+    }
+
     prevPageBtn.onclick = ()=>{ page=Math.max(1,page-1); updateTable(); };
     nextPageBtn.onclick = ()=>{ page=page+1; updateTable(); };
     rowsPerPageSel.onchange = ()=>{ page=1; updateTable(); };
@@ -457,7 +591,7 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
     exportCsvBtn.onclick = ()=>{
       const rows = rowsFromFeatures(currentFeatureList());
       const header = COLUMNS.map(c=>c.label).join(",");
-      const csv = [header, ...rows.map(r => [r.id,r.name,r.company,r.country,r.count,r.salary,r.experience,r.lat,r.lon].map(v=>{
+      const csv = [header, ...rows.map(r => [r.id,r.name,r.company,r.country,r.count,r.salary,r.experience,r.type,r.date,r.lat,r.lon].map(v=>{
         if(v==null) return ""; const s=String(v).replace(/"/g,'""'); return /[",\n]/.test(s)?`"${s}"`:s;
       }).join(","))].join("\n");
       const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="jobs.csv"; a.click(); URL.revokeObjectURL(url);
@@ -466,62 +600,33 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
     document.getElementById("closeDrawer").onclick = ()=> toggleDrawer(false);
     window.addEventListener("keydown", (e)=>{ if(e.key.toLowerCase()==="t") toggleDrawer(); if(e.key==="Escape") toggleDrawer(false); });
 
-    // ---------- mode switching ----------
-    function setMode(mode){
-      currentMode = mode;
-      ["tabMap","tabEO","tabVE"].forEach(id=> document.getElementById(id).classList.toggle("active", id === ("tab"+mode[0].toUpperCase()+mode.slice(1)) ));
-      if(mode==="ve"){
-        // hex aggregation
-        layerModeLabel.textContent = "Hex aggregation";
-        showClusterLayers(false);
-        recomputeColoring();
-        deckOverlay.setProps({ layers:[buildHexLayer()] });
-      } else {
-        // clustered points (map / eo)
-        layerModeLabel.textContent = "Clusters / Points";
-        deckOverlay.setProps({ layers:[] });
-        updateClusterData(filtered);
-        showClusterLayers(true);
-      }
+    // ---------- UI listeners ----------
+    function refreshAll(){
+      recomputeColoring();
+      updateSourceData(filtered);
+      if(currentRenderer==="hexgrid") renderHexGrid();
       updateTable();
     }
 
-    // ---------- map helpers ----------
-    function fitTo(fc,pad=100){ const b=turf.bbox(fc); map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:pad,duration:800}); }
-    function flyRegion(tag){ if(tag==="europe") map.fitBounds([[-25,35],[45,72]],{padding:50}); else if(tag==="nl") map.fitBounds([[3.2,50.5],[7.3,53.7]],{padding:60}); else if(filtered?.features?.length) fitTo(filtered); }
-
-    // ---------- data -> GeoJSON from CSV ----------
-    function csvToGeoJSON(rows){
-      const header = Object.keys(rows[0]||{}).reduce((m,k)=>{ m[k.toLowerCase()]=k; return m; },{});
-      const lonK=header.longitude||header.lon||header.lng||header.x;
-      const latK=header.latitude||header.lat||header.y;
-      const features=[];
-      for(let i=0;i<rows.length;i++){
-        const r=rows[i], lon=Number(r[lonK]), lat=Number(r[latK]);
-        if(Number.isFinite(lon) && Number.isFinite(lat)){
-          features.push({ type:"Feature", geometry:{type:"Point",coordinates:[lon,lat]}, properties:{ id:r.id ?? i, name:r.title ?? r.job_title ?? r.role ?? r.name ?? "Job", company:r.company ?? r.employer ?? "", country:r.country ?? "", count: Number(r.count ?? 1) || 1, salary: Number(r.salary ?? r.pay ?? 0) || 0, experience: Number(r.experience ?? r.exp ?? 0) || 0 } });
-        }
-      }
-      return { type:"FeatureCollection", features };
-    }
-
-    async function geocode(text){
-      const url=`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(text)}&limit=1`;
-      const res=await fetch(url,{headers:{'Accept':'application/json'}});
-      const j=await res.json();
-      if(!Array.isArray(j) || j.length===0) return null;
-      return [parseFloat(j[0].lon), parseFloat(j[0].lat)];
-    }
-
-    // ---------- UI listeners ----------
-    document.getElementById("tabMap").addEventListener("click", ()=>{ applyFilters(); setMode("map"); if(filtered.features.length) fitTo(filtered,90); });
-    document.getElementById("tabEO").addEventListener("click", ()=>{
-      const kws=["earth","observation","remote","sensing","gis","copernicus","sentinel"];
-      const base = rawData?.features || [];
-      filtered = { type:"FeatureCollection", features: base.filter(f=>{ const s=`${f.properties.name} ${f.properties.company}`.toLowerCase(); return kws.some(k=>s.includes(k)); }) };
-      setMode("eo"); if(filtered.features.length) fitTo(filtered,90);
+    document.getElementById("rendererSelect").addEventListener("change", (e)=> { setLayerVisibility(e.target.value); });
+    document.getElementById("attrSelect").addEventListener("change", (e)=>{ activeAttr=e.target.value; map.setPaintProperty(L_POINTS,"circle-color",["case",
+      ["==", ["var","mode"], "salary"], paletteStepExpression(["to-number",["get","salary"]]),
+      ["==", ["var","mode"], "experience"], paletteStepExpression(["to-number",["get","experience"]]),
+      paletteStepExpression(["to-number",["get","count"]]) ]); map.setLayerProperty?.(L_POINTS, "mode", activeAttr); map.setLayerProperty?.(L_CLUSTER, "mode", activeAttr); map.setLayerProperty?.(L_HEAT, "mode", activeAttr); refreshAll();
     });
-    document.getElementById("tabVE").addEventListener("click", ()=>{ applyFilters(); setMode("ve"); if(filtered.features.length) fitTo(filtered,90); });
+    document.getElementById("classSelect").addEventListener("change", refreshAll);
+    document.getElementById("radiusRange").addEventListener("input", ()=>{ map.setLayerProperty?.(L_POINTS,"ptRadius", +document.getElementById("radiusRange").value); });
+    document.getElementById("opacityRange").addEventListener("input", ()=>{ map.setLayerProperty?.(L_POINTS,"ptOpacity", +document.getElementById("opacityRange").value/100); });
+    document.getElementById("blendToggle").addEventListener("change", ()=>{}); // visual only for deck layers
+
+    document.getElementById("countryFilter").addEventListener("change", ()=>{ applyFilters(); refreshAll(); fitIfAny(); });
+    document.getElementById("searchFilter").addEventListener("input", ()=>{ applyFilters(); refreshAll(); });
+
+    document.querySelectorAll(".region-btn").forEach(btn=>{
+      btn.addEventListener("click", ()=>{ document.querySelectorAll(".region-btn").forEach(b=>b.classList.remove("active")); btn.classList.add("active");
+        const tag=btn.dataset.region; if(tag==="europe") map.fitBounds([[-25,35],[45,72]],{padding:50}); else if(tag==="nl") map.fitBounds([[3.2,50.5],[7.3,53.7]],{padding:60}); else fitIfAny();
+      });
+    });
 
     document.getElementById("btnAddLayer").addEventListener("click", ()=> document.getElementById("fileInput").click());
     document.getElementById("fileInput").addEventListener("change", (e)=>{
@@ -536,12 +641,7 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
           const json=JSON.parse(reader.result);
           fc=json.type==="FeatureCollection"?json:{type:"FeatureCollection",features:json.features??[]};
         }
-        rawData=fc; applyFilters();
-        // update both possible renderers
-        updateClusterData(filtered);
-        if(currentMode==="ve") deckOverlay.setProps({ layers:[buildHexLayer()] });
-        setMode(currentMode);
-        if(filtered.features.length) fitTo(filtered,100);
+        rawData=fc; applyFilters(); updateSourceData(filtered); renderHexGrid(); recomputeColoring(); setLayerVisibility(currentRenderer); fitIfAny(); updateTable();
       }catch(err){ alert("Failed to load file: "+err.message); } };
       reader.readAsText(f);
     });
@@ -558,44 +658,45 @@ SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
         for(const row of parsed.data){
           const loc=row[locKey]; const title=row[titleKey];
           if(!loc || !title) continue;
-          let coords=cache.get(loc); if(!coords){ try{ coords=await geocode(loc); cache.set(loc,coords); }catch(e){ coords=null; } }
-          if(coords){ feats.push({ type:"Feature", geometry:{type:"Point",coordinates:coords}, properties:{ id:feats.length, name:title, company: row.company ?? row.employer ?? "", country: row.country ?? "", count:1, salary: Number(row.salary)||0, experience: Number(row.experience)||0 } }); }
+          let coords=cache.get(loc); if(!coords){ try{ const nom=`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(loc)}&limit=1`; const res=await fetch(nom); const j=await res.json(); coords=j?.[0]?[+j[0].lon,+j[0].lat]:null; cache.set(loc,coords);}catch(e){ coords=null; } }
+          if(coords){ feats.push({ type:"Feature", geometry:{type:"Point",coordinates:coords},
+            properties:{ id:feats.length, name:title, company: row.company ?? row.employer ?? "", country: row.country ?? "", count: Number(row.count)||1, salary: Number(row.salary)||0, experience: Number(row.experience)||0, type: row.type||"", date: row.date||"" } }); }
         }
         fc={type:"FeatureCollection",features:feats};
       }
       if(fc.features.length===0){ alert("No mappable rows found."); return; }
-      rawData=fc; applyFilters();
-      updateClusterData(filtered);
-      setMode(currentMode); // refresh renderer + table
-      fitTo(filtered,100);
+      rawData=fc; applyFilters(); refreshAll(); setLayerVisibility(currentRenderer); fitIfAny();
     });
 
-    document.getElementById("layerVisible").addEventListener("change",(e)=>{
-      const on = e.target.checked;
-      if(currentMode==="ve"){ deckOverlay.setProps({ layers: on ? [buildHexLayer()] : [] }); }
-      else { showClusterLayers(on); }
-    });
+    function csvToGeoJSON(rows){
+      const header = Object.keys(rows[0]||{}).reduce((m,k)=>{ m[k.toLowerCase()]=k; return m; },{});
+      const lonK=header.longitude||header.lon||header.lng||header.x;
+      const latK=header.latitude||header.lat||header.y;
+      const features=[];
+      for(let i=0;i<rows.length;i++){
+        const r=rows[i], lon=Number(r[lonK]), lat=Number(r[latK]);
+        if(Number.isFinite(lon) && Number.isFinite(lat)){
+          features.push({ type:"Feature", geometry:{type:"Point",coordinates:[lon,lat]},
+            properties:{ id: r.id ?? i, name: r.title ?? r.job_title ?? r.role ?? r.name ?? "Job",
+              company: r.company ?? r.employer ?? "", country: r.country ?? "", count: Number(r.count ?? 1) || 1,
+              salary: Number(r.salary ?? r.pay ?? 0) || 0, experience: Number(r.experience ?? r.exp ?? 0) || 0,
+              type: r.type || "", date: r.date || "" } });
+        }
+      }
+      return { type:"FeatureCollection", features };
+    }
 
-    ["attrSelect","classSelect","radiusRange","opacityRange","blendToggle"].forEach(id=>{
-      document.getElementById(id).addEventListener("change", ()=>{ if(currentMode==="ve"){ deckOverlay.setProps({ layers:[buildHexLayer()] }); } updateTable(); });
-      document.getElementById(id).addEventListener("input",  ()=>{ if(currentMode==="ve"){ deckOverlay.setProps({ layers:[buildHexLayer()] }); } });
-    });
-
-    document.getElementById("countryFilter").addEventListener("change", ()=>{ applyFilters(); updateClusterData(filtered); setMode(currentMode); if(filtered.features.length) fitTo(filtered,80); });
-    document.getElementById("searchFilter").addEventListener("input", ()=>{ applyFilters(); updateClusterData(filtered); setMode(currentMode); });
-
-    document.querySelectorAll(".region-btn").forEach(btn=>{
-      btn.addEventListener("click", ()=>{ document.querySelectorAll(".region-btn").forEach(b=>b.classList.remove("active")); btn.classList.add("active"); flyRegion(btn.dataset.region); });
-    });
+    function fitIfAny(){ if(filtered?.features?.length){ const b=turf.bbox(filtered); map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:100,duration:600}); } }
 
     // ---------- init ----------
     map.on("load", ()=>{
-      ensureClusterLayers();
+      ensureSourceAndLayers();
       rawData = generateSampleData();
       applyFilters();
-      updateClusterData(filtered);
-      setMode("map");
-      if(filtered.features.length) fitTo(filtered,100);
+      updateSourceData(filtered);
+      setLayerVisibility("clusters");
+      recomputeColoring();
+      fitIfAny();
       updateTable();
     });
 
