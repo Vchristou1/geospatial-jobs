@@ -44,7 +44,6 @@
         <button id="tabMap" class="pill active">Map Visualization</button>
         <button id="tabVE"  class="pill">Vector Enrichment jobs</button>
       </div>
-      <!-- Clusters / Heatmap toggle -->
       <div class="mt-2 flex gap-2">
         <button id="modeCluster" class="pill active">Clusters</button>
         <button id="modeHeat" class="pill">Heatmap</button>
@@ -147,9 +146,12 @@ const map = new maplibregl.Map({ container:'map', style:CONFIG.STYLE, center:[5.
 const deckOverlay = new deck.MapboxOverlay({ interleaved:true, layers:[] });
 map.addControl(deckOverlay);
 
-// Province polygons (load real file; fallback if missing)
+// Province polygons (use your real file; fallback used only if file missing)
 const REGIONS_URL = 'data/nl_provinces_simplified.geojson';
-let NL_REGIONS = null;
+let NL_REGIONS = null;       // FeatureCollection of provinces
+let NL_BOUNDARY = null;      // Dissolved boundary for heatmap base fill
+
+// Fallback (rough boxes) – used only when the real file is absent
 const PROVINCE_FALLBACK = {
   type:'FeatureCollection', features:[
     turf.bboxPolygon([3.3,52.2,5.5,53.7], {properties:{name:'Noord-Holland'}}),
@@ -158,7 +160,7 @@ const PROVINCE_FALLBACK = {
   ]
 };
 
-// UI
+// UI refs
 const tabMap=document.getElementById('tabMap'), tabVE=document.getElementById('tabVE');
 const modeCluster=document.getElementById('modeCluster'), modeHeat=document.getElementById('modeHeat');
 const toggleTableBtn=document.getElementById('toggleTable'), closeDrawerBtn=document.getElementById('closeDrawer'), drawer=document.getElementById('drawer');
@@ -170,8 +172,9 @@ const legend=document.getElementById('legend'), lgLow=document.getElementById('l
 const tableFiltered=document.getElementById('tableFiltered'), tblHead=document.getElementById('tbl').querySelector('thead'), tblBody=document.getElementById('tbl').querySelector('tbody'), rowCount=document.getElementById('rowCount');
 
 // Data
-let raw=null, filtered=null, currentRenderer='clusters', salaryRange=[0,0];
+let raw=null, filtered=null, currentRenderer='clusters';
 
+// Sample jobs (NL only)
 function sampleData(){
   const rows = [
     {lon:4.8945,lat:52.3667,company:'Leaseweb', job:'SAP Functional Application Manager', salary:89582, experience:2, type:'Hybrid', date:'2025-03-03', applied:'No'},
@@ -192,9 +195,7 @@ function sampleData(){
 const quantiles=(arr,k)=>{ const a=[...arr].sort((x,y)=>x-y), q=[]; if(!a.length) return q; for(let i=1;i<k;i++){ const p=i/k, idx=(a.length-1)*p, lo=Math.floor(idx), hi=Math.ceil(idx); q.push(lo===hi?a[lo]:a[lo]+(a[hi]-a[lo])*(idx-lo)); } return q; };
 function computeSalaryRange(){
   const vals = raw.features.map(f=>+f.properties.salary).filter(v=>isFinite(v)&&v>0);
-  const min = vals.length?Math.min(...vals):0;
-  const max = vals.length?Math.max(...vals):0;
-  salaryRange=[min,max];
+  const min=vals.length?Math.min(...vals):0, max=vals.length?Math.max(...vals):0;
   salaryMin.value=min||0; salaryMax.value=max||0;
 }
 function withinDays(dateStr,maxDays){ if(!maxDays || !/^\d+$/.test(String(maxDays))) return true; const d=new Date(dateStr); if(isNaN(+d)) return false; const diffDays=(Date.now()-d.getTime())/(1000*60*60*24); return diffDays<=maxDays+1e-9; }
@@ -220,41 +221,44 @@ function applyFilters(){
 function fitTo(fc){ if(!fc.features.length) return; const b=turf.bbox(fc); map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:100}); }
 
 // Map layers
-const SRC='jobs', L_CLUSTER='cluster-circles', L_CLUSTER_TXT='cluster-text', L_POINTS='points', L_HEAT='heat';
+const SRC='jobs', L_CLUSTER='cluster-circles', L_CLUSTER_TXT='cluster-text', L_POINTS='points', L_HEAT='heat', L_NL_BASE='nl-base-fill';
 function ensureLayers(){
   if(map.getSource(SRC)) return;
+
+  // Base Netherlands fill (blue baseline for heatmap)
+  map.addSource('nl-base', { type:'geojson', data:{type:'FeatureCollection',features:[]} });
+  map.addLayer({
+    id:L_NL_BASE, type:'fill', source:'nl-base',
+    paint:{ 'fill-color':'#3aa0ff', 'fill-opacity':0.35 }
+  });
+  map.setLayoutProperty(L_NL_BASE,'visibility','none'); // show only in heatmap mode
+
+  // Jobs (with clustering)
   map.addSource(SRC,{ type:'geojson', data:{type:'FeatureCollection',features:[]}, cluster:true, clusterRadius:CONFIG.CLUSTER_RADIUS, clusterMaxZoom:CONFIG.CLUSTER_MAX_ZOOM });
 
-  map.addLayer({
-    id:L_CLUSTER, type:'circle', source:SRC, filter:['has','point_count'],
-    paint:{
-      'circle-color': CONFIG.PALETTE[2], // set by recolorClusters()
-      'circle-radius': ['interpolate',['linear'],['get','point_count'],1,14,100,34],
-      'circle-stroke-color':'#0F1115','circle-stroke-width':2,'circle-opacity':0.95
-    }
-  });
+  map.addLayer({ id:L_CLUSTER, type:'circle', source:SRC, filter:['has','point_count'],
+    paint:{ 'circle-color': CONFIG.PALETTE[2], 'circle-radius': ['interpolate',['linear'],['get','point_count'],1,14,100,34],
+            'circle-stroke-color':'#0F1115','circle-stroke-width':2,'circle-opacity':0.95 }});
   map.addLayer({ id:L_CLUSTER_TXT, type:'symbol', source:SRC, filter:['has','point_count'],
     layout:{'text-field':['to-string',['get','point_count']],'text-size':12}, paint:{'text-color':'#fff'} });
+  map.addLayer({ id:L_POINTS, type:'circle', source:SRC, filter:['!', ['has','point_count']],
+    paint:{ 'circle-color':'#a855f7','circle-radius':7,'circle-stroke-color':'#0F1115','circle-stroke-width':1.5,'circle-opacity':0.95 }});
 
-  map.addLayer({
-    id:L_POINTS, type:'circle', source:SRC, filter:['!', ['has','point_count']],
-    paint:{ 'circle-color':'#a855f7','circle-radius':7,'circle-stroke-color':'#0F1115','circle-stroke-width':1.5,'circle-opacity':0.95 }
-  });
-
-  // STRONG heatmap so it's visible with small datasets
+  // Strong heatmap; 0 density = BLUE (not transparent)
   map.addLayer({
     id:L_HEAT, type:'heatmap', source:SRC,
     paint:{
       'heatmap-radius': ['interpolate',['linear'],['zoom'],5,35,9,70],
       'heatmap-intensity': ['interpolate',['linear'],['zoom'],5,1.2,9,2.1],
-      'heatmap-weight': 1, // pure density (counts)
+      'heatmap-weight': 1,
       'heatmap-color': ['interpolate',['linear'],['heatmap-density'],
-        0,'rgba(0,0,0,0)', 0.25,'#3aa0ff', 0.55,'#ffd166', 0.8,'#ff8c42', 1,'#ff4d4d'],
+        0,'#3aa0ff', 0.25,'#66b7ff', 0.55,'#ffd166', 0.8,'#ff8c42', 1,'#ff4d4d'],
       'heatmap-opacity':0.9
     }
   });
   map.setLayoutProperty(L_HEAT,'visibility','none');
 
+  // cluster → zoom to leaves
   map.on('click', L_CLUSTER, e=>{
     const f=e.features?.[0]; if(!f) return;
     map.getSource(SRC).getClusterLeaves(f.properties.cluster_id, Infinity, 0, (err,leaves)=>{
@@ -264,6 +268,7 @@ function ensureLayers(){
     });
   });
 
+  // point popups; include all jobs at same coordinate
   map.on('click', L_POINTS, e=>{
     const f=e.features?.[0]; if(!f) return;
     const [lon,lat]=f.geometry.coordinates;
@@ -294,14 +299,14 @@ function ensureLayers(){
   });
 }
 
-// Dynamic cluster palette from visible counts
+// Cluster palette based on visible counts
 function recolorClusters(){
-  const feats = map.queryRenderedFeatures({layers:[L_CLUSTER]});
-  const counts = feats.map(f=>f.properties.point_count).filter(v=>isFinite(v));
+  const feats=map.queryRenderedFeatures({layers:[L_CLUSTER]});
+  const counts=feats.map(f=>f.properties.point_count).filter(v=>isFinite(v));
   if(!counts.length) return;
-  const br = quantiles(counts, CONFIG.PALETTE.length);
+  const br=quantiles(counts, CONFIG.PALETTE.length);
   legend.innerHTML = CONFIG.PALETTE.map(c=>`<div style="flex:1;background:${c}"></div>`).join('');
-  lgLow.textContent = Math.min(...counts); lgHigh.textContent = Math.max(...counts);
+  lgLow.textContent=Math.min(...counts); lgHigh.textContent=Math.max(...counts);
   map.setPaintProperty(L_CLUSTER,'circle-color',
     ['step',['get','point_count'],
       CONFIG.PALETTE[0],
@@ -312,19 +317,27 @@ function recolorClusters(){
     ]);
 }
 
-// Renderer switching
+// Modes
 function setRenderer(kind){
-  currentRenderer = kind;
-  const show = (id,vis)=> map.getLayer(id) && map.setLayoutProperty(id,'visibility',vis?'visible':'none');
-  if(kind==='clusters'){ show(L_CLUSTER,true); show(L_CLUSTER_TXT,true); show(L_POINTS,true); show(L_HEAT,false); deckOverlay.setProps({layers:[]}); recolorClusters(); }
-  else if(kind==='heatmap'){ show(L_CLUSTER,false); show(L_CLUSTER_TXT,false); show(L_POINTS,false); show(L_HEAT,true); deckOverlay.setProps({layers:[]}); }
-  else { // vector enrichment
-    show(L_CLUSTER,false); show(L_CLUSTER_TXT,false); show(L_POINTS,false); show(L_HEAT,false);
+  currentRenderer=kind;
+  const show=(id,vis)=> map.getLayer(id) && map.setLayoutProperty(id,'visibility',vis?'visible':'none');
+  if(kind==='clusters'){
+    show(L_NL_BASE,false); show(L_HEAT,false);
+    show(L_CLUSTER,true); show(L_CLUSTER_TXT,true); show(L_POINTS,true);
+    deckOverlay.setProps({layers:[]}); recolorClusters();
+  }else if(kind==='heatmap'){
+    // Base blue fill + heatmap on top
+    show(L_NL_BASE,true); show(L_HEAT,true);
+    show(L_CLUSTER,false); show(L_CLUSTER_TXT,false); show(L_POINTS,false);
+    deckOverlay.setProps({layers:[]});
+  }else{ // vector enrichment (provinces)
+    show(L_NL_BASE,false); show(L_HEAT,false);
+    show(L_CLUSTER,false); show(L_CLUSTER_TXT,false); show(L_POINTS,false);
     renderRegionAggregation();
   }
 }
 
-// Province aggregation
+// Province aggregation (sum of jobs per province polygon)
 function renderRegionAggregation(){
   const REG = NL_REGIONS?.features?.length ? NL_REGIONS : PROVINCE_FALLBACK;
   if(!filtered?.features?.length || !REG?.features?.length){ deckOverlay.setProps({layers:[]}); return; }
@@ -364,7 +377,7 @@ function refresh(){
   if(currentRenderer==='vector') renderRegionAggregation();
 }
 
-// TABLE
+// TABLE (editable)
 const COLS=[
   {k:'id',label:'ID',edit:false},
   {k:'name',label:'Title',edit:true},
@@ -423,7 +436,7 @@ function renderTable(){
   });
 }
 
-// Wiring
+// UI wiring
 document.querySelectorAll('.region-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     document.querySelectorAll('.region-btn').forEach(b=>b.classList.remove('active'));
@@ -437,7 +450,6 @@ document.querySelectorAll('.region-btn').forEach(btn=>{
 
 tabMap.onclick = ()=>{ tabMap.classList.add('active'); tabVE.classList.remove('active'); setRenderer(modeHeat.classList.contains('active')?'heatmap':'clusters'); fitTo(filtered); };
 tabVE.onclick  = ()=>{ tabVE.classList.add('active'); tabMap.classList.remove('active'); setRenderer('vector'); fitTo(filtered); };
-
 modeCluster.onclick = ()=>{ modeCluster.classList.add('active'); modeHeat.classList.remove('active'); setRenderer('clusters'); recolorClusters(); };
 modeHeat.onclick    = ()=>{ modeHeat.classList.add('active'); modeCluster.classList.remove('active'); setRenderer('heatmap'); };
 
@@ -486,11 +498,33 @@ addRowBtn.onclick=()=>{
   computeSalaryRange(); refresh(); renderTable();
 };
 
+// Load provinces; build dissolved NL boundary for base fill
+async function loadProvinces(){
+  try{
+    const res=await fetch(REGIONS_URL,{cache:'no-store'});
+    if(!res.ok) throw new Error('provinces file not found');
+    NL_REGIONS=await res.json();
+    // Dissolve boundary
+    NL_BOUNDARY = NL_REGIONS.features.slice(1).reduce(
+      (acc,feat)=>turf.union(acc, feat), NL_REGIONS.features[0]
+    );
+    // Set base source for heatmap baseline (blue)
+    map.getSource('nl-base')?.setData(NL_BOUNDARY);
+  }catch(e){
+    console.warn('Using fallback province boxes. Add data/nl_provinces_simplified.geojson for sharp regions.', e);
+    NL_REGIONS = PROVINCE_FALLBACK;
+    // Use union of fallbacks as boundary
+    NL_BOUNDARY = PROVINCE_FALLBACK.features.slice(1).reduce(
+      (acc,feat)=>turf.union(acc, feat), PROVINCE_FALLBACK.features[0]
+    );
+    map.getSource('nl-base')?.setData(NL_BOUNDARY);
+  }
+}
+
 // Bootstrap
 map.on('load', async ()=>{
   ensureLayers();
-  // try load real provinces
-  try{ const res=await fetch(REGIONS_URL,{cache:'no-store'}); if(res.ok) NL_REGIONS=await res.json(); }catch(e){ console.warn('Province file not found, using fallback.', e); }
+  await loadProvinces();
   raw = sampleData();
   computeSalaryRange(); applyFilters();
   map.getSource(SRC).setData(filtered);
@@ -498,7 +532,8 @@ map.on('load', async ()=>{
   renderTable();
   fitTo(filtered);
 });
-// recolor when viewport changes
+
+// recolor clusters on move
 map.on('moveend', ()=>{ if(currentRenderer==='clusters') recolorClusters(); });
 </script>
 </body>
