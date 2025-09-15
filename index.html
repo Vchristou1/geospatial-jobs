@@ -4,71 +4,61 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Geospatial Jobs Visualization</title>
+
+  <!-- UI / libs -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.css"/>
   <script src="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/deck.gl@8.9.27/dist.min.js"></script>
   <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="https://unpkg.com/feather-icons"></script>
-  <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+
   <style>
-    :root {
-      --bg:#0F1115; --panel:#131722; --stroke:#242634;
-      --text:#E7E9EE; --muted:#9AA0AB; --accent:#5563FF;
-    }
+    :root { --bg:#0F1115; --panel:#131722; --stroke:#242634; --text:#E7E9EE; --muted:#9AA0AB; --accent:#5563FF; }
     html,body { height:100%; }
-    body {
-      margin:0; background:var(--bg); color:var(--text);
-      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
-      overflow:hidden;
-    }
+    body { margin:0; background:var(--bg); color:var(--text); font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; overflow:hidden; }
     #map { position:absolute; inset:0; }
-    .bg-panel{ background:var(--panel); }
-    .text-muted{ color:var(--muted); }
-    .border-stroke{ border-color:var(--stroke); }
-    .bg-accent{ background:var(--accent); }
+    .bg-panel{ background:var(--panel); } .text-muted{ color:var(--muted); } .border-stroke{ border-color:var(--stroke); } .bg-accent{ background:var(--accent); }
     .outline-focus:focus{ outline:2px solid var(--accent); outline-offset:2px; }
     .sidebar{ position:absolute; inset:0 auto 0 0; width:340px; z-index:10; box-shadow:2px 0 12px rgba(0,0,0,.35); }
     .legend { display:flex; height:16px; border-radius:6px; overflow:hidden; border:1px solid var(--stroke); }
-    .tooltip {
-      position:absolute; z-index:50; pointer-events:none;
-      background:var(--panel); border:1px solid var(--stroke);
-      border-radius:10px; padding:10px; font-size:13px; max-width:280px;
-      transform:translate(10px, -10px);
-    }
-    .region-btn{
-      background:var(--panel); border:1px solid var(--stroke); color:var(--muted);
-      padding:6px 12px; border-radius:8px; cursor:pointer; font-size:13px;
-    }
+    .tooltip { position:absolute; z-index:50; pointer-events:none; background:var(--panel); border:1px solid var(--stroke); border-radius:10px; padding:10px; font-size:13px; max-width:280px; transform:translate(10px,-10px); }
+    .region-btn{ background:var(--panel); border:1px solid var(--stroke); color:var(--muted); padding:6px 12px; border-radius:8px; cursor:pointer; font-size:13px; }
     .region-btn.active{ background:var(--accent); color:white; }
-    .pill{ padding:.25rem .5rem; border:1px solid var(--stroke); border-radius:.5rem; font-size:.75rem; color:var(--muted);}
+    .pill{ padding:.35rem .6rem; border:1px solid var(--stroke); border-radius:.6rem; font-size:.75rem; color:var(--muted); cursor:pointer; }
+    .pill.active{ background:var(--accent); color:#fff; border-color:transparent; }
+    input[type="file"]{ display:none; }
   </style>
 </head>
 <body>
+  <!-- Sidebar -->
   <aside class="sidebar bg-panel flex flex-col">
     <header class="p-4 border-b border-stroke">
       <h1 class="text-xl font-semibold">Geospatial</h1>
       <div class="flex gap-2 mt-3 text-xs">
-        <span class="pill bg-accent text-white border-0">Map Visualization</span>
-        <span class="pill">Earth Observation jobs</span>
-        <span class="pill">Vector Enrichment jobs</span>
+        <button id="tabMap" class="pill active">Map Visualization</button>
+        <button id="tabEO"  class="pill">Earth Observation jobs</button>
+        <button id="tabVE"  class="pill">Vector Enrichment jobs</button>
       </div>
     </header>
 
     <div class="p-4 overflow-y-auto grow space-y-4">
+      <!-- Layers -->
       <section class="bg-panel border border-stroke rounded-2xl p-4">
         <div class="flex items-center justify-between mb-2">
           <h2 class="font-semibold">Layers</h2>
           <button id="btnAddLayer" class="bg-accent text-white text-sm px-3 py-1 rounded-md">Add Layer</button>
+          <input id="fileInput" type="file" accept=".geojson,.json,.csv"/>
         </div>
 
         <div class="border border-stroke rounded-xl p-3">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <input id="layerVisible" type="checkbox" checked class="accent-indigo-500"/>
-              <span>Job Points</span>
+              <span>Job layer</span>
             </div>
-            <span class="text-muted text-xs">Scatterplot</span>
+            <span id="layerModeLabel" class="text-muted text-xs">Scatterplot</span>
           </div>
 
           <div class="mt-3 grid grid-cols-1 gap-3">
@@ -91,9 +81,7 @@
 
             <div>
               <div class="legend" id="legendRamp"></div>
-              <div id="legendLabels" class="flex justify-between text-[11px] text-muted mt-1">
-                <span>low</span><span>high</span>
-              </div>
+              <div id="legendLabels" class="flex justify-between text-[11px] text-muted mt-1"><span>low</span><span>high</span></div>
             </div>
 
             <div class="grid grid-cols-2 gap-3">
@@ -115,16 +103,19 @@
         </div>
       </section>
 
+      <!-- Paste data -->
       <section class="bg-panel border border-stroke rounded-2xl p-4">
         <h2 class="font-semibold mb-2">Paste Job Data</h2>
-        <p class="text-muted text-sm mb-3">Paste tabular job data (e.g. from Excel) to visualize on map.</p>
+        <p class="text-muted text-sm mb-3">Paste CSV/TSV from Excel/Sheets. Use columns like: <code>title</code>, <code>company</code>, <code>country</code>, <code>salary</code>, <code>experience</code>, and either <code>lat/lon</code> or a <code>location</code> text.</p>
 
-        <textarea id="jobDataInput" class="w-full h-32 bg-panel border border-stroke rounded-md px-3 py-2 outline-focus" 
-          placeholder="Paste tabular data here (e.g. Excel). Must include location (city/country) or lat/lon columns."></textarea>
+        <textarea id="jobDataInput" class="w-full h-32 bg-panel border border-stroke rounded-md px-3 py-2 outline-focus"
+          placeholder="Example:
+title,company,location,country,salary,experience
+SAP Consultant,Acme,'Amsterdam, Netherlands',NL,78000,3"></textarea>
 
         <div class="grid grid-cols-2 gap-3 mt-3 mb-3">
           <div>
-            <label class="text-sm text-muted">Location Column</label>
+            <label class="text-sm text-muted">Location column</label>
             <select id="locationColumn" class="mt-1 w-full bg-panel border border-stroke rounded-md px-3 py-2 outline-focus">
               <option value="location">location</option>
               <option value="city">city</option>
@@ -132,7 +123,7 @@
             </select>
           </div>
           <div>
-            <label class="text-sm text-muted">Title Column</label>
+            <label class="text-sm text-muted">Title column</label>
             <select id="titleColumn" class="mt-1 w-full bg-panel border border-stroke rounded-md px-3 py-2 outline-focus">
               <option value="title">title</option>
               <option value="job_title">job_title</option>
@@ -144,6 +135,7 @@
         <button id="visualizeJobsBtn" class="bg-accent text-white w-full py-2 rounded-md">Visualize on Map</button>
       </section>
 
+      <!-- Filters -->
       <section class="bg-panel border border-stroke rounded-2xl p-4">
         <h2 class="font-semibold mb-2">Filters</h2>
         <div class="grid grid-cols-1 gap-3">
@@ -161,479 +153,252 @@
     </div>
   </aside>
 
+  <!-- Region buttons -->
   <div class="absolute top-4 left-[360px] z-10 flex gap-2">
     <button class="region-btn active" data-region="fit">Fit to Data</button>
     <button class="region-btn" data-region="europe">Europe</button>
     <button class="region-btn" data-region="nl">Netherlands</button>
   </div>
 
+  <!-- Map + tooltip -->
   <div id="map"></div>
-
   <div id="tooltip" class="tooltip" style="display:none;"></div>
 
   <script>
-    // Note: This won't work directly due to CORS and LinkedIn's protections
-    // You would need a backend proxy to handle the actual scraping
     const CONFIG = {
       STYLE_URL: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
       PALETTE: ["#6C1D6B","#9C2C7A","#D4475D","#F07E2E","#FFA600"],
-      ATTR_DEFAULT: "count",
-      MAX_POINTS: 200000
+      ATTR_DEFAULT: "count"
     };
 
-    const hexToRgb = (hex) => {
-      const m = hex.replace("#",""); return [
-        parseInt(m.substring(0,2),16),
-        parseInt(m.substring(2,4),16),
-        parseInt(m.substring(4,6),16)
-      ];
-    };
-    const quantiles = (arr, k) => {
-      const a = [...arr].sort((x,y)=>x-y);
-      const q = []; for(let i=1;i<k;i++){
-        const p = i/k;
-        const idx = (a.length-1)*p;
-        const lo = Math.floor(idx), hi = Math.ceil(idx);
-        const v = lo===hi ? a[lo] : a[lo] + (a[hi]-a[lo])*(idx-lo);
-        q.push(v);
-      }
-      return q;
-    };
-    const equalBreaks = (arr, k) => {
-      const min = Math.min(...arr), max = Math.max(...arr);
-      const step = (max-min)/k; const b=[];
-      for(let i=1;i<k;i++) b.push(min+step*i);
-      return b;
-    };
-    const classify = (v, breaks) => {
-      for(let i=0;i<breaks.length;i++) if(v<=breaks[i]) return i;
-      return breaks.length;
-    };
-    const formatNum = (n) => new Intl.NumberFormat().format(n);
+    // ---- utils ----
+    const hexToRgb = h => { const m=h.replace("#",""); return [parseInt(m.slice(0,2),16),parseInt(m.slice(2,4),16),parseInt(m.slice(4,6),16)]; };
+    const quantiles = (arr,k)=>{ const a=[...arr].sort((x,y)=>x-y),q=[]; for(let i=1;i<k;i++){ const p=i/k,idx=(a.length-1)*p,lo=Math.floor(idx),hi=Math.ceil(idx); q.push(lo===hi?a[lo]:a[lo]+(a[hi]-a[lo])*(idx-lo)); } return q; };
+    const equalBreaks=(arr,k)=>{ const min=Math.min(...arr),max=Math.max(...arr),step=(max-min)/k,b=[]; for(let i=1;i<k;i++) b.push(min+step*i); return b; };
+    const classify=(v,br)=>{ for(let i=0;i<br.length;i++) if(v<=br[i]) return i; return br.length; };
+    const fmt=n=> new Intl.NumberFormat().format(n);
 
-    const map = new maplibregl.Map({
-      container: "map",
-      style: CONFIG.STYLE_URL,
-      center: [5.3, 52.2],
-      zoom: 6.2,
-      attributionControl: true
-    });
-
-    let rawData = null;
-    let filtered = null;
-    let breaks = null;
-    let activeAttr = CONFIG.ATTR_DEFAULT;
-
-    function generateSampleData(){
-      // Hardcoded job data with coordinates for given locations
-      const jobLocations = [
-        { city: "Amsterdam", company: "Leaseweb", lat: 52.3667, lon: 4.8945, job: "SAP Functional Application Manager Authorizations" },
-        { city: "Amsterdam", company: "Deloitte", lat: 52.3667, lon: 4.8945, job: "Junior SAP Consultant" },
-        { city: "Lieshout", company: "Royal Swinkels", lat: 51.5194, lon: 5.5958, job: "Junior SAP Application Manager" },
-        { city: "Utrecht", company: "Billennium", lat: 52.0907, lon: 5.1214, job: "SAP Consultant – Talent Pool (100% Remote)" },
-        { city: "Eindhoven", company: "SixteenFifty", lat: 51.4416, lon: 5.4697, job: "SAP MM Support Consultant" }
-      ];
-
-      const fc = { type:"FeatureCollection", features:[] };
-      
-      jobLocations.forEach((loc, i) => {
-        fc.features.push({
-          type:"Feature",
-          geometry: { type:"Point", coordinates:[loc.lon, loc.lat] },
-          properties: {
-            id: i,
-            name: loc.job,
-            company: loc.company,
-            country: "NL",
-            count: 1,
-            salary: 60000 + (Math.random()*30000|0), // Random salary between 60k-90k
-            experience: 2 + (Math.random()*3|0) // Random experience between 2-5 years
-          }
-        });
-      });
-
-      return fc;
-    }
-
-    const deckOverlay = new deck.MapboxOverlay({ interleaved: true, layers: [] });
+    // ---- map ----
+    const map = new maplibregl.Map({ container:"map", style: CONFIG.STYLE_URL, center:[5.3,52.2], zoom:6.2, attributionControl:true });
+    const deckOverlay = new deck.MapboxOverlay({ interleaved:true, layers:[] });
     map.addControl(deckOverlay);
 
+    // ---- state ----
+    let rawData=null, filtered=null, breaks=null, activeAttr=CONFIG.ATTR_DEFAULT;
+    const layerModeLabel = document.getElementById("layerModeLabel");
+
+    function generateSampleData(){
+      const jobLocations = [
+        { city: "Amsterdam", company: "Leaseweb", lat: 52.3667, lon: 4.8945, job: "SAP Functional Application Manager" },
+        { city: "Amsterdam", company: "Deloitte", lat: 52.3667, lon: 4.8945, job: "Junior SAP Consultant" },
+        { city: "Lieshout",  company: "Royal Swinkels", lat: 51.5194, lon: 5.5958, job: "Junior SAP Application Manager" },
+        { city: "Utrecht",   company: "Billennium", lat: 52.0907, lon: 5.1214, job: "SAP Consultant (Remote)" },
+        { city: "Eindhoven", company: "SixteenFifty", lat: 51.4416, lon: 5.4697, job: "SAP MM Support Consultant" }
+      ];
+      return { type:"FeatureCollection", features: jobLocations.map((loc,i)=>({
+        type:"Feature",
+        geometry:{ type:"Point", coordinates:[loc.lon,loc.lat] },
+        properties:{ id:i, name:loc.job, company:loc.company, country:"NL", count:1, salary: 60000+((Math.random()*30000)|0), experience: 2+((Math.random()*3)|0) }
+      }))};
+    }
+
+    // ---- layers ----
     function buildScatter(){
-      const radiusPx = +document.getElementById("radiusRange").value;
-      const opacity = +document.getElementById("opacityRange").value / 100;
-      const additive = document.getElementById("blendToggle").checked;
+      const r = +document.getElementById("radiusRange").value;
+      const op = +document.getElementById("opacityRange").value/100;
+      const add = document.getElementById("blendToggle").checked;
       const gl = deck.GL;
 
       return new deck.ScatterplotLayer({
         id:"jobs",
         data: filtered.features,
-        getPosition: d => d.geometry.coordinates,
-        getRadius: d => radiusPx,
-        radiusUnits: "pixels",
-        radiusMinPixels: 1,
-        radiusMaxPixels: 30,
-        opacity,
-        pickable: true,
-        autoHighlight: true,
-        parameters: {
-          depthTest:false,
-          blend: true,
-          blendFunc: additive ? [gl.SRC_ALPHA, gl.ONE] : [gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA],
-          blendEquation: gl.FUNC_ADD
-        },
-        getFillColor: d => {
-          const v = Number(d.properties[activeAttr]);
-          const cls = classify(v, breaks);
-          const rgb = hexToRgb(CONFIG.PALETTE[cls]);
-          return [rgb[0], rgb[1], rgb[2], 255];
-        },
-        onHover: ({x,y,object}) => {
-          const t = document.getElementById("tooltip");
-          if(object){
-            t.style.display = "block";
-            t.style.left = x+"px"; t.style.top = y+"px";
-            t.innerHTML = `
-              <div class="font-semibold">${object.properties.name}</div>
-              <div class="text-muted">${object.properties.company}</div>
-              <div class="mt-1 text-sm">Jobs: <b>${object.properties.count}</b> · Salary: <b>€${formatNum(object.properties.salary)}</b> · Exp: <b>${object.properties.experience}y</b></div>
-              <div class="text-[11px] text-muted mt-1">${object.geometry.coordinates[1].toFixed(4)}, ${object.geometry.coordinates[0].toFixed(4)}</div>
-            `;
-          } else {
-            t.style.display = "none";
-          }
+        getPosition: d=>d.geometry.coordinates,
+        getRadius: r,
+        radiusUnits:"pixels",
+        radiusMinPixels:1, radiusMaxPixels:30,
+        opacity: op,
+        pickable:true, autoHighlight:true,
+        parameters:{ depthTest:false, blend:true, blendFunc: add ? [gl.SRC_ALPHA, gl.ONE] : [gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA], blendEquation: gl.FUNC_ADD },
+        getFillColor: d => { const v=Number(d.properties[activeAttr]); const cls=classify(v,breaks); const rgb=hexToRgb(CONFIG.PALETTE[cls]); return [rgb[0],rgb[1],rgb[2],255]; },
+        onHover: ({x,y,object})=>{
+          const t=document.getElementById("tooltip");
+          if(object){ t.style.display="block"; t.style.left=x+"px"; t.style.top=y+"px";
+            t.innerHTML=`<div class="font-semibold">${object.properties.name}</div>
+                         <div class="text-muted">${object.properties.company}</div>
+                         <div class="mt-1 text-sm">Jobs: <b>${object.properties.count}</b> · Salary: <b>€${fmt(object.properties.salary)}</b> · Exp: <b>${object.properties.experience}y</b></div>
+                         <div class="text-[11px] text-muted mt-1">${object.geometry.coordinates[1].toFixed(4)}, ${object.geometry.coordinates[0].toFixed(4)}</div>`; }
+          else t.style.display="none";
         },
         onClick: ({object})=>{
           if(!object) return;
-          document.getElementById("liKeywords").value = object.properties.name;
-          document.getElementById("liLocation").value = countryIsoToName(object.properties.country) || object.properties.country;
-          updateLinkedInPreview();
+          map.flyTo({ center: object.geometry.coordinates, zoom: 9, essential: true });
         }
       });
-    }
-
-    function countryIsoToName(iso){
-      const map = { NL:"Netherlands", DE:"Germany", FR:"France", BE:"Belgium", UK:"United Kingdom", ES:"Spain", IT:"Italy", PL:"Poland", SE:"Sweden", DK:"Denmark" };
-      return map[iso];
-    }
-
-    function recomputeColoring(){
-      const values = filtered.features.map(f => Number(f.properties[activeAttr])).filter(Number.isFinite);
-      const method = document.getElementById("classSelect").value;
-      breaks = method === "equal" ? equalBreaks(values, CONFIG.PALETTE.length) : quantiles(values, CONFIG.PALETTE.length);
-      const ramp = document.getElementById("legendRamp");
-      ramp.innerHTML = CONFIG.PALETTE.map(c=>`<div style="flex:1;background:${c}"></div>`).join("");
-      const labs = [Math.min(...values), ...breaks, Math.max(...values)];
-      const low = formatNum(Math.round(labs[0])); const high = formatNum(Math.round(labs[labs.length-1]));
-      document.getElementById("legendLabels").innerHTML = `<span>${low}</span><span>${high}</span>`;
-    }
-
-    function fitTo(fc, pad=100){
-      const bbox = turf.bbox(fc);
-      map.fitBounds([[bbox[0],bbox[1]],[bbox[2],bbox[3]]], { padding: pad, duration: 800 });
-    }
-    function flyRegion(tag){
-      if(tag==="europe") map.fitBounds([[-25,35],[45,72]],{padding:50});
-      else if(tag==="nl") map.fitBounds([[3.2,50.5],[7.3,53.7]],{padding:60});
-      else if(tag==="us") map.fitBounds([[-125,24],[-66,50]],{padding:50});
-      else fitTo(filtered);
-    }
-
-    function applyFilters(){
-      const iso = document.getElementById("countryFilter").value;
-      const q = document.getElementById("searchFilter").value.trim().toLowerCase();
-      filtered = {
-        type:"FeatureCollection",
-        features: rawData.features.filter(f=>{
-          const okCountry = !iso || f.properties.country===iso;
-          const inText = !q || (f.properties.name.toLowerCase().includes(q) || f.properties.company.toLowerCase().includes(q));
-          return okCountry && inText;
-        })
-      };
-    }
-
-    function buildLinkedInUrl(){
-      const keywords = encodeURIComponent(document.getElementById("liKeywords").value.trim());
-      const location = encodeURIComponent(document.getElementById("liLocation").value.trim());
-      const seconds = document.getElementById("liDate").value;
-      const km = Number(document.getElementById("liDistanceKm").value || 0);
-      const miles = Math.round(km * 0.621371);
-
-      const exps = [...document.querySelectorAll(".li-exp:checked")].map(cb=>cb.value).join(",");
-      const types = [...document.querySelectorAll(".li-type:checked")].map(cb=>cb.value).join(",");
-      const wt = document.querySelector("input[name='li-wt']:checked")?.value || "";
-
-      const params = new URLSearchParams();
-      if(keywords) params.set("keywords", decodeURIComponent(keywords));
-      if(location) params.set("location", decodeURIComponent(location));
-      if(miles>0) params.set("distance", String(miles));
-      if(seconds) params.set("f_TPR","r"+seconds);
-      if(exps) params.set("f_E", exps);
-      if(types) params.set("f_JT", types);
-      if(wt) params.set("f_WT", wt);
-      params.set("sortBy","R");
-
-      return "https://www.linkedin.com/jobs/search/?"+params.toString();
-    }
-    function updateLinkedInPreview(){
-      const url = buildLinkedInUrl();
-      const a = document.getElementById("liPreview");
-      a.textContent = url;
-      a.href = url;
-    }
-
-    document.getElementById("visualizeJobsBtn").addEventListener("click", async () => {
-      try {
-        const dataText = document.getElementById("jobDataInput").value.trim();
-        if (!dataText) {
-          alert("Please paste some job data first");
-          return;
-        }
-
-        // Parse tabular data (TSV or CSV)
-        const rows = Papa.parse(dataText, { header: true }).data;
-        if (rows.length === 0) {
-          alert("No valid data found - make sure it's tabular data with headers");
-          return;
-        }
-
-        const locationCol = document.getElementById("locationColumn").value;
-        const titleCol = document.getElementById("titleColumn").value;
-        
-        // Geocode locations and create features
-        const features = [];
-        const geocodeCache = {};
-        
-        for (const row of rows) {
-          if (!row[locationCol] || !row[titleCol]) continue;
-
-          // Check cache for already geocoded locations
-          if (!geocodeCache[row[locationCol]]) {
-            const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(row[locationCol])}`;
-            const geocodeRes = await fetch(geocodeUrl);
-            const geocodeData = await geocodeRes.json();
-            
-            if (geocodeData.length > 0) {
-              const { lat, lon } = geocodeData[0];
-              geocodeCache[row[locationCol]] = { 
-                coordinates: [parseFloat(lon), parseFloat(lat)] 
-              };
-            }
-          }
-
-          if (geocodeCache[row[locationCol]]) {
-            features.push({
-              type: "Feature",
-              geometry: {
-                type: "Point",
-                coordinates: geocodeCache[row[locationCol]].coordinates
-              },
-              properties: {
-                id: features.length,
-                name: row[titleCol],
-                company: row.company || row.employer || "",
-                country: row.country || "",
-                count: 1,
-                salary: Number(row.salary) || 0,
-                experience: Number(row.experience) || 0
-              }
-            });
-          }
-        }
-
-        if (features.length === 0) {
-          alert("No valid locations found - check your location column");
-          return;
-        }
-
-        // Update map with new data
-        rawData = { type: "FeatureCollection", features };
-        applyFilters();
-        refreshLayer();
-        fitTo(filtered, 100);
-
-      } catch (err) {
-        console.error("Error:", err);
-        alert("Failed to process job data");
-      }
-    });
-
-    function refreshLayer(){
-      recomputeColoring();
-      deckOverlay.setProps({ layers:[buildScatter()] });
-    }
-
-    document.getElementById("layerVisible").addEventListener("change", (e)=>{
-      deckOverlay.setProps({ layers: e.target.checked ? [buildScatter()] : [] });
-    });
-    document.getElementById("attrSelect").addEventListener("change", (e)=>{
-      activeAttr = e.target.value; refreshLayer();
-    });
-    document.getElementById("classSelect").addEventListener("change", refreshLayer);
-    document.getElementById("radiusRange").addEventListener("input", refreshLayer);
-    document.getElementById("opacityRange").addEventListener("input", refreshLayer);
-    document.getElementById("blendToggle").addEventListener("change", refreshLayer);
-
-    document.getElementById("countryFilter").addEventListener("change", ()=>{
-      applyFilters(); refreshLayer(); fitTo(filtered, 80);
-    });
-    document.getElementById("searchFilter").addEventListener("input", ()=>{
-      applyFilters(); refreshLayer();
-    });
-
-    document.querySelectorAll(".region-btn").forEach(btn=>{
-      btn.addEventListener("click", ()=>{
-        document.querySelectorAll(".region-btn").forEach(b=>b.classList.remove("active"));
-        btn.classList.add("active");
-        flyRegion(btn.dataset.region);
-      });
-    });
-
-    function csvToGeoJSON(csvRows){
-      const header = Object.keys(csvRows[0] || {}).reduce((m,k)=>{ m[k.toLowerCase()] = k; return m; },{});
-      const lonKey = header.longitude || header.lon || header.lng || header.x;
-      const latKey = header.latitude || header.lat || header.y;
-      if (!lonKey || !latKey) throw new Error("CSV must include lon/lat columns");
-
-      const features = csvRows.map((r,i)=>{
-        const lon = Number(r[lonKey]), lat = Number(r[latKey]);
-        if (!isFinite(lon) || !isFinite(lat)) return null;
-        return {
-          type:"Feature",
-          geometry:{ type:"Point", coordinates:[lon,lat] },
-          properties:{
-            id: r.id ?? i,
-            name: r.name ?? r.title ?? "Job",
-            company: r.company ?? r.employer ?? "",
-            country: r.country ?? "",
-            count: Number(r.count ?? 1) || 1,
-            salary: Number(r.salary ?? r.pay ?? 0) || 0,
-            experience: Number(r.experience ?? r.exp ?? 0) || 0
-          }
-        };
-      }).filter(Boolean);
-
-      return { type:"FeatureCollection", features };
-    }
-
-    async function loadGeoDataFromUrl(url){
-      const res = await fetch(url);
-      const text = await res.text();
-      if (url.toLowerCase().endsWith(".csv") || text.trim().split("\n")[0].includes(",")) {
-        const parsed = Papa.parse(text, { header:true, dynamicTyping:true });
-        return csvToGeoJSON(parsed.data);
-      } else {
-        const json = JSON.parse(text);
-        return json.type === "FeatureCollection" ? json : { type:"FeatureCollection", features: json.features ?? [] };
-      }
-    }
-
-    function setDataAndRefresh(fc){
-      rawData = fc;
-      applyFilters();
-      refreshLayer();
-      fitTo(filtered, 100);
     }
 
     function buildHexLayer(){
       return new deck.HexagonLayer({
-        id: "jobs-hex",
+        id:"jobs-hex",
         data: filtered.features,
-        getPosition: d => d.geometry.coordinates,
-        radius: 5000,          // ~5km cells; tune for NL/EU
-        extruded: false,
-        colorRange: CONFIG.PALETTE.map(h => [...hexToRgb(h), 220]),
-        getColorWeight: d => Number(d.properties[activeAttr]) || 1,
-        colorAggregation: "SUM",
-        pickable: true,
+        getPosition:d=>d.geometry.coordinates,
+        radius:5000, extruded:false,
+        colorRange: CONFIG.PALETTE.map(h=>[...hexToRgb(h),220]),
+        getColorWeight:d=>Number(d.properties[activeAttr])||1,
+        colorAggregation:"SUM",
+        pickable:true,
         onHover: ({x,y,object})=>{
-          const t = document.getElementById("tooltip");
-          if(object){
-            t.style.display="block"; t.style.left=x+"px"; t.style.top=y+"px";
-            t.innerHTML = `<div class="font-semibold">Jobs in cell: ${object.points.length}</div>`;
-          } else t.style.display="none";
+          const t=document.getElementById("tooltip");
+          if(object){ t.style.display="block"; t.style.left=x+"px"; t.style.top=y+"px"; t.innerHTML=`<div class="font-semibold">Jobs in cell: ${object.points.length}</div>`; }
+          else t.style.display="none";
         }
       });
     }
 
-    function filterForEO(){
-      // very light keyword filter on role name/company (tweak as you like)
-      const kws = ["earth", "observation", "remote", "sensing", "gis", "copernicus", "sentinel"];
-      const f = rawData.features.filter(f => {
-        const s = `${f.properties.name} ${f.properties.company}`.toLowerCase();
-        return kws.some(k => s.includes(k));
-      });
-      return { type:"FeatureCollection", features: f };
+    // ---- classification / filtering ----
+    function recomputeColoring(){
+      const vals = filtered.features.map(f=>Number(f.properties[activeAttr])).filter(Number.isFinite);
+      const method = document.getElementById("classSelect").value;
+      breaks = method==="equal" ? equalBreaks(vals, CONFIG.PALETTE.length) : quantiles(vals, CONFIG.PALETTE.length);
+      document.getElementById("legendRamp").innerHTML = CONFIG.PALETTE.map(c=>`<div style="flex:1;background:${c}"></div>`).join("");
+      const labs=[Math.min(...vals),...breaks,Math.max(...vals)];
+      document.getElementById("legendLabels").innerHTML = `<span>${fmt(Math.round(labs[0]))}</span><span>${fmt(Math.round(labs.at(-1)))}</span>`;
     }
 
-    function setActivePill(activeId){
-      ["tabMap","tabEO","tabVE"].forEach(id=>{
-        const el = document.getElementById(id);
-        if(!el) return;
-        el.classList.toggle("bg-accent", id===activeId);
-        el.classList.toggle("text-white", id===activeId);
-      });
+    function applyFilters(){
+      if(!rawData){ filtered={type:"FeatureCollection",features:[]}; return; }
+      const iso=document.getElementById("countryFilter").value;
+      const q =(document.getElementById("searchFilter").value||"").trim().toLowerCase();
+      filtered = { type:"FeatureCollection", features: rawData.features.filter(f=>{
+        const ok=!iso || f.properties.country===iso;
+        const txt=`${f.properties.name} ${f.properties.company}`.toLowerCase();
+        return ok && (!q || txt.includes(q));
+      })};
     }
 
-    document.getElementById("tabMap")?.addEventListener("click", ()=>{
-      setActivePill("tabMap");
-      applyFilters(); // back to normal filtered points
-      refreshLayer();
-    });
+    function refreshScatter(){ layerModeLabel.textContent="Scatterplot"; recomputeColoring(); deckOverlay.setProps({ layers:[buildScatter()] }); }
+    function refreshHex(){ layerModeLabel.textContent="Hex aggregation"; recomputeColoring(); deckOverlay.setProps({ layers:[buildHexLayer()] }); }
 
-    document.getElementById("tabEO")?.addEventListener("click", ()=>{
+    function fitTo(fc, pad=100){ const b=turf.bbox(fc); map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:pad,duration:800}); }
+    function flyRegion(tag){ if(tag==="europe") map.fitBounds([[-25,35],[45,72]],{padding:50}); else if(tag==="nl") map.fitBounds([[3.2,50.5],[7.3,53.7]],{padding:60}); else if(filtered?.features?.length) fitTo(filtered); }
+
+    // ---- data loaders ----
+    function csvToGeoJSON(rows){
+      const header = Object.keys(rows[0]||{}).reduce((m,k)=>{ m[k.toLowerCase()]=k; return m; },{});
+      const lonK=header.longitude||header.lon||header.lng||header.x;
+      const latK=header.latitude||header.lat||header.y;
+      const features=[];
+      for(let i=0;i<rows.length;i++){
+        const r=rows[i];
+        const lon = Number(r[lonK]); const lat = Number(r[latK]);
+        if(Number.isFinite(lon) && Number.isFinite(lat)){
+          features.push({
+            type:"Feature",
+            geometry:{type:"Point",coordinates:[lon,lat]},
+            properties:{
+              id:r.id ?? i,
+              name:r.title ?? r.job_title ?? r.role ?? r.name ?? "Job",
+              company:r.company ?? r.employer ?? "",
+              country:r.country ?? "",
+              count: Number(r.count ?? 1) || 1,
+              salary: Number(r.salary ?? r.pay ?? 0) || 0,
+              experience: Number(r.experience ?? r.exp ?? 0) || 0
+            }
+          });
+        }
+      }
+      return { type:"FeatureCollection", features };
+    }
+
+    async function geocode(text){
+      const url=`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(text)}&limit=1`;
+      const res=await fetch(url,{headers:{'Accept':'application/json'}});
+      const j=await res.json();
+      if(!Array.isArray(j) || j.length===0) return null;
+      return [parseFloat(j[0].lon), parseFloat(j[0].lat)];
+    }
+
+    // ---- UI wiring ----
+    function setActivePill(id){ ["tabMap","tabEO","tabVE"].forEach(pid=>document.getElementById(pid).classList.toggle("active", pid===id)); }
+
+    document.getElementById("tabMap").addEventListener("click", ()=>{ setActivePill("tabMap"); applyFilters(); refreshScatter(); if(filtered.features.length) fitTo(filtered,90); });
+    document.getElementById("tabEO").addEventListener("click", ()=>{ 
       setActivePill("tabEO");
-      // scope filtered data to EO-like roles
-      const eoData = filterForEO();
-      filtered = eoData;
-      refreshLayer();
-      // also prefill LinkedIn keywords to EO terms
-      document.getElementById("liKeywords").value = "earth observation, remote sensing, GIS, Copernicus, Sentinel";
-      updateLinkedInPreview();
-      fitTo(filtered, 80);
+      // simple EO keywords
+      const kws=["earth","observation","remote","sensing","gis","copernicus","sentinel"];
+      filtered={ type:"FeatureCollection", features: (rawData?.features||[]).filter(f=>{ const s=`${f.properties.name} ${f.properties.company}`.toLowerCase(); return kws.some(k=>s.includes(k)); }) };
+      refreshScatter();
+      if(filtered.features.length) fitTo(filtered,90);
+    });
+    document.getElementById("tabVE").addEventListener("click", ()=>{ setActivePill("tabVE"); applyFilters(); refreshHex(); if(filtered.features.length) fitTo(filtered,90); });
+
+    document.getElementById("btnAddLayer").addEventListener("click", ()=> document.getElementById("fileInput").click());
+    document.getElementById("fileInput").addEventListener("change", (e)=>{
+      const f=e.target.files?.[0]; if(!f) return;
+      const reader=new FileReader();
+      reader.onload=()=>{ try{
+        let fc;
+        if(f.name.toLowerCase().endsWith(".csv")){
+          const parsed=Papa.parse(reader.result,{header:true, dynamicTyping:true, skipEmptyLines:true});
+          fc=csvToGeoJSON(parsed.data);
+        }else{
+          const json=JSON.parse(reader.result);
+          fc=json.type==="FeatureCollection"?json:{type:"FeatureCollection",features:json.features??[]};
+        }
+        rawData=fc; applyFilters(); refreshScatter(); if(filtered.features.length) fitTo(filtered,100);
+      }catch(err){ alert("Failed to load file: "+err.message); } };
+      reader.readAsText(f);
     });
 
-    document.getElementById("tabVE")?.addEventListener("click", ()=>{
-      setActivePill("tabVE");
-      // keep the same filtered set but switch to hex aggregation
-      recomputeColoring(); // keep palette/legend
-      deckOverlay.setProps({ layers:[buildHexLayer()] });
-    });
+    document.getElementById("visualizeJobsBtn").addEventListener("click", async ()=>{
+      const text=(document.getElementById("jobDataInput").value||"").trim();
+      if(!text){ alert("Paste some rows first."); return; }
+      const parsed=Papa.parse(text,{header:true, dynamicTyping:true, skipEmptyLines:true});
+      let fc=csvToGeoJSON(parsed.data);
 
-    document.getElementById("fileInput")?.addEventListener("change", (e)=>{
-      const file = e.target.files?.[0]; if(!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          let fc;
-          if (file.name.toLowerCase().endsWith(".csv")) {
-            const parsed = Papa.parse(reader.result, { header:true, dynamicTyping:true });
-            fc = csvToGeoJSON(parsed.data);
-          } else {
-            const json = JSON.parse(reader.result);
-            fc = json.type === "FeatureCollection" ? json : { type:"FeatureCollection", features: json.features ?? [] };
+      // if no lat/lon, try geocoding a location column
+      if(fc.features.length===0){
+        const locKey=document.getElementById("locationColumn").value;
+        const titleKey=document.getElementById("titleColumn").value;
+        const cache=new Map(); const feats=[];
+        for(const row of parsed.data){
+          const loc=row[locKey]; const title=row[titleKey];
+          if(!loc || !title) continue;
+          let coords=cache.get(loc);
+          if(!coords){ try{ coords=await geocode(loc); cache.set(loc,coords); }catch(e){ coords=null; } }
+          if(coords){
+            feats.push({ type:"Feature", geometry:{type:"Point",coordinates:coords},
+              properties:{ id:feats.length, name:title, company: row.company ?? row.employer ?? "", country: row.country ?? "", count:1, salary: Number(row.salary)||0, experience: Number(row.experience)||0 } });
           }
-          setDataAndRefresh(fc);
-        } catch(err){ alert("Failed to load file: " + err.message); }
-      };
-      reader.readAsText(file);
+        }
+        fc={type:"FeatureCollection",features:feats};
+      }
+
+      if(fc.features.length===0){ alert("No mappable rows found. Add lat/lon columns or a geocodable location."); return; }
+      rawData=fc; applyFilters(); refreshScatter(); fitTo(filtered,100);
     });
 
-    document.getElementById("loadUrlBtn")?.addEventListener("click", async ()=>{
-      const url = document.getElementById("urlInput").value.trim();
-      if(!url) return;
-      try{
-        const fc = await loadGeoDataFromUrl(url);
-        setDataAndRefresh(fc);
-      }catch(err){ alert("Failed to fetch URL: " + err.message); }
+    // sliders / filters
+    document.getElementById("layerVisible").addEventListener("change",(e)=>{ deckOverlay.setProps({ layers: e.target.checked ? deckOverlay.props.layers : [] }); });
+    document.getElementById("attrSelect").addEventListener("change",(e)=>{ activeAttr=e.target.value; (document.getElementById("tabVE").classList.contains("active")?refreshHex:refreshScatter)(); });
+    document.getElementById("classSelect").addEventListener("change", ()=> (document.getElementById("tabVE").classList.contains("active")?refreshHex:refreshScatter)() );
+    document.getElementById("radiusRange").addEventListener("input", ()=> (document.getElementById("tabVE").classList.contains("active")?refreshHex:refreshScatter)() );
+    document.getElementById("opacityRange").addEventListener("input", ()=> (document.getElementById("tabVE").classList.contains("active")?refreshHex:refreshScatter)() );
+    document.getElementById("blendToggle").addEventListener("change", ()=> (document.getElementById("tabVE").classList.contains("active")?refreshHex:refreshScatter)() );
+
+    document.getElementById("countryFilter").addEventListener("change", ()=>{ applyFilters(); (document.getElementById("tabVE").classList.contains("active")?refreshHex:refreshScatter)(); if(filtered.features.length) fitTo(filtered,80); });
+    document.getElementById("searchFilter").addEventListener("input", ()=>{ applyFilters(); (document.getElementById("tabVE").classList.contains("active")?refreshHex:refreshScatter)(); });
+
+    // region buttons
+    document.querySelectorAll(".region-btn").forEach(btn=>{
+      btn.addEventListener("click", ()=>{ document.querySelectorAll(".region-btn").forEach(b=>b.classList.remove("active")); btn.classList.add("active"); flyRegion(btn.dataset.region); });
     });
 
-    // Initialize with Netherlands view by default
+    // init
     map.on("load", ()=>{
       rawData = generateSampleData();
       applyFilters();
-      refreshLayer();
-      fitTo(filtered, 100);
-      updateLinkedInPreview();
+      refreshScatter();
+      if(filtered.features.length) fitTo(filtered,100);
     });
 
     feather.replace();
