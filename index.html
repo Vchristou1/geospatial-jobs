@@ -22,10 +22,20 @@
   .legend{display:flex;height:14px;border:1px solid var(--stroke);border-radius:6px;overflow:hidden}
   .region-btn{background:var(--panel);border:1px solid var(--stroke);color:var(--muted);padding:6px 12px;border-radius:8px;cursor:pointer}
   .region-btn.active{background:var(--accent);color:#fff}
-  /* drawer fix: do not block clicks when closed */
-  .drawer{position:fixed;left:0;right:0;bottom:0;height:40vh;background:var(--panel);border-top:1px solid var(--stroke);
-          transform:translateY(100%);transition:.25s;z-index:40;pointer-events:none}
-  .drawer.open{transform:translateY(0);pointer-events:auto}
+
+  /* bottom table drawer */
+  .drawer{position:fixed;left:0;right:0;bottom:0;height:42vh;background:var(--panel);border-top:1px solid var(--stroke);
+          transform:translateY(0); /* start open */ transition:.25s;z-index:40;pointer-events:auto;display:flex;flex-direction:column}
+  .drawer.closed{transform:translateY(100%);pointer-events:none}
+  .drawer header{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.5rem .75rem;border-bottom:1px solid var(--stroke)}
+  .drawer .tools{display:flex;gap:.5rem;align-items:center}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  thead th{position:sticky;top:0;background:#0F1115;border-bottom:1px solid var(--stroke);text-align:left;padding:.5rem .6rem}
+  tbody td{border-bottom:1px solid var(--stroke);padding:.4rem .6rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  td[contenteditable="true"]{outline:1px dashed transparent}
+  td[contenteditable="true"]:focus{outline:1px dashed var(--accent);background:#0c0f18}
+  .btn{background:var(--panel);border:1px solid var(--stroke);padding:.35rem .6rem;border-radius:.5rem;font-size:.8rem;color:var(--text);cursor:pointer}
+  .btn.primary{background:var(--accent);border-color:transparent;color:#fff}
 </style>
 </head>
 <body>
@@ -37,12 +47,15 @@
         <button id="tabEO"  class="pill">Earth Observation jobs</button>
         <button id="tabVE"  class="pill">Vector Enrichment jobs</button>
       </div>
+      <div class="mt-3 flex gap-2">
+        <button id="toggleTable" class="btn primary">Toggle table (T)</button>
+        <button id="addRow" class="btn">Add job row</button>
+      </div>
     </div>
 
     <div class="card">
       <div class="flex items-center justify-between mb-2">
         <h2 class="font-semibold">Layers</h2>
-        <!-- Import data is optional; renderer is how you choose the visualization -->
         <button id="btnImport" class="bg-indigo-500 text-white text-sm px-3 py-1 rounded-md">Import data</button>
         <input id="fileInput" type="file" accept=".csv,.geojson,.json" hidden/>
       </div>
@@ -90,7 +103,29 @@
 
   <div id="map"></div>
 
-  <!-- (If you kept the table drawer from earlier, it will no longer block clicks when closed because of the CSS above) -->
+  <!-- EDITABLE TABLE DRAWER (visible by default) -->
+  <section id="drawer" class="drawer">
+    <header>
+      <div class="tools">
+        <strong>Data table</strong>
+        <label class="text-xs flex items-center gap-1 ml-3">
+          <input id="tableFiltered" type="checkbox" class="accent-indigo-500" checked/>
+          <span class="text-gray-400">Use current filters</span>
+        </label>
+        <span id="rowCount" class="text-gray-400 text-xs"></span>
+      </div>
+      <div class="tools">
+        <button id="exportCsv" class="btn">Export CSV</button>
+        <button id="closeDrawer" class="btn">Close</button>
+      </div>
+    </header>
+    <div style="overflow:auto">
+      <table id="tbl">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
 
 <script>
 const CONFIG = {
@@ -105,10 +140,7 @@ const map = new maplibregl.Map({ container:'map', style:CONFIG.STYLE, center:[5.
 const deckOverlay = new deck.MapboxOverlay({ interleaved:true, layers:[] });
 map.addControl(deckOverlay);
 
-// ----- UI refs
-const tabMap = document.getElementById('tabMap');
-const tabEO  = document.getElementById('tabEO');
-const tabVE  = document.getElementById('tabVE');
+// UI refs
 const rendererSel = document.getElementById('renderer');
 const attrSel = document.getElementById('attr');
 const classSel = document.getElementById('classif');
@@ -118,17 +150,25 @@ const countrySel = document.getElementById('country');
 const qInput = document.getElementById('q');
 const legend = document.getElementById('legend');
 const lgLow = document.getElementById('lgLow'), lgHigh = document.getElementById('lgHigh');
+const drawer = document.getElementById('drawer');
+const toggleTableBtn = document.getElementById('toggleTable');
+const closeDrawerBtn = document.getElementById('closeDrawer');
+const addRowBtn = document.getElementById('addRow');
+const tableFiltered = document.getElementById('tableFiltered');
+const tblHead = document.getElementById('tbl').querySelector('thead');
+const tblBody = document.getElementById('tbl').querySelector('tbody');
+const rowCount = document.getElementById('rowCount');
 
-let raw = null, filtered = null, breaks = [0,0,0,0], currentRenderer = 'clusters';
+let raw=null, filtered=null, breaks=[0,0,0,0], currentRenderer='clusters';
 
-// ----- sample data
+// Sample data
 function sampleData(){
   const rows = [
-    {city:'Amsterdam',lon:4.8945,lat:52.3667,company:'Leaseweb', job:'SAP Functional Application Manager', country:'NL', count:1, salary:89582, experience:2, type:'Hybrid', date:'2025-03-03'},
-    {city:'Amsterdam',lon:4.8945,lat:52.3667,company:'Deloitte',  job:'Junior SAP Consultant', country:'NL', count:1, salary:65754, experience:3, type:'On-site', date:'2025-03-07'},
-    {city:'Lieshout', lon:5.5958,lat:51.5194,company:'Royal Swinkels', job:'Junior SAP Application Manager', country:'NL', count:1, salary:89834, experience:2, type:'On-site', date:'2025-03-02'},
-    {city:'Utrecht',  lon:5.1214,lat:52.0907,company:'Billennium', job:'SAP Consultant (Remote)', country:'NL', count:1, salary:68849, experience:3, type:'Remote', date:'2025-03-01'},
-    {city:'Eindhoven',lon:5.4697,lat:51.4416,company:'SixteenFifty', job:'SAP MM Support Consultant', country:'NL', count:1, salary:72918, experience:3, type:'Hybrid', date:'2025-03-06'}
+    {lon:4.8945,lat:52.3667,company:'Leaseweb', job:'SAP Functional Application Manager', country:'NL', count:1, salary:89582, experience:2, type:'Hybrid', date:'2025-03-03'},
+    {lon:4.8945,lat:52.3667,company:'Deloitte',  job:'Junior SAP Consultant', country:'NL', count:1, salary:65754, experience:3, type:'On-site', date:'2025-03-07'},
+    {lon:5.5958,lat:51.5194,company:'Royal Swinkels', job:'Junior SAP Application Manager', country:'NL', count:1, salary:89834, experience:2, type:'On-site', date:'2025-03-02'},
+    {lon:5.1214,lat:52.0907,company:'Billennium', job:'SAP Consultant (Remote)', country:'NL', count:1, salary:68849, experience:3, type:'Remote', date:'2025-03-01'},
+    {lon:5.4697,lat:51.4416,company:'SixteenFifty', job:'SAP MM Support Consultant', country:'NL', count:1, salary:72918, experience:3, type:'Hybrid', date:'2025-03-06'}
   ];
   return { type:'FeatureCollection', features: rows.map((r,i)=>({
     type:'Feature',
@@ -138,11 +178,9 @@ function sampleData(){
   }))};
 }
 
-// ----- helpers
-const toRGB = hex => { const h=hex.replace('#',''); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; };
+// helpers
 const quantiles = (arr,k)=>{ const a=[...arr].sort((x,y)=>x-y), q=[]; for(let i=1;i<k;i++){ const p=i/k, idx=(a.length-1)*p, lo=Math.floor(idx), hi=Math.ceil(idx); q.push(lo===hi?a[lo]:a[lo]+(a[hi]-a[lo])*(idx-lo)); } return q; };
 const equalBreaks=(arr,k)=>{ const mn=Math.min(...arr), mx=Math.max(...arr), step=(mx-mn)/k, b=[]; for(let i=1;i<k;i++) b.push(mn+step*i); return b; };
-
 function computeBreaks(){
   const attr = attrSel.value;
   const vals = (filtered?.features||[]).map(f => +f.properties[attr] || 0);
@@ -152,7 +190,6 @@ function computeBreaks(){
   lgLow.textContent = Math.round(Math.min(...vals)).toLocaleString();
   lgHigh.textContent = Math.round(Math.max(...vals)).toLocaleString();
 }
-
 function applyFilters(){
   const iso = countrySel.value, q = qInput.value.trim().toLowerCase();
   filtered = { type:'FeatureCollection', features: (raw?.features||[]).filter(f=>{
@@ -161,16 +198,10 @@ function applyFilters(){
     return ok && (!q || txt.includes(q));
   })};
 }
-
 function fitTo(fc){ if(!fc.features.length) return; const b=turf.bbox(fc); map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:100}); }
 
-// ----- map layers
-const SRC='jobs';
-const L_CLUSTER='cluster-circles';
-const L_CLUSTER_TXT='cluster-text';
-const L_POINTS='points';
-const L_HEAT='heat';
-
+// map layers
+const SRC='jobs', L_CLUSTER='cluster-circles', L_CLUSTER_TXT='cluster-text', L_POINTS='points', L_HEAT='heat';
 function ensureLayers(){
   if(!map.getSource(SRC)){
     map.addSource(SRC, {
@@ -183,57 +214,36 @@ function ensureLayers(){
         sum_count: ['+', ['accumulated'], ['to-number',['get','count']]]
       }
     });
-
     map.addLayer({
       id:L_CLUSTER, type:'circle', source:SRC, filter:['has','point_count'],
       paint:{
-        'circle-color': ['step',
-          ['get','point_count'], CONFIG.PALETTE[0],
-          10, CONFIG.PALETTE[1],
-          30, CONFIG.PALETTE[2],
-          70, CONFIG.PALETTE[3],
-          100, CONFIG.PALETTE[4]
-        ],
+        'circle-color': ['step', ['get','point_count'], CONFIG.PALETTE[0], 10, CONFIG.PALETTE[1], 30, CONFIG.PALETTE[2], 70, CONFIG.PALETTE[3], 100, CONFIG.PALETTE[4]],
         'circle-radius': ['interpolate',['linear'],['get','point_count'],1,14,100,34],
         'circle-stroke-color':'#0F1115','circle-stroke-width':2,'circle-opacity':0.9
       }
     });
-    map.addLayer({
-      id:L_CLUSTER_TXT, type:'symbol', source:SRC, filter:['has','point_count'],
-      layout:{'text-field':['to-string',['get','point_count']],'text-size':12}, paint:{'text-color':'#fff'}
-    });
+    map.addLayer({ id:L_CLUSTER_TXT, type:'symbol', source:SRC, filter:['has','point_count'],
+      layout:{'text-field':['to-string',['get','point_count']],'text-size':12}, paint:{'text-color':'#fff'} });
     map.addLayer({
       id:L_POINTS, type:'circle', source:SRC, filter:['!', ['has','point_count']],
       paint:{
-        'circle-color': ['step',
-          ['to-number',['get','count']], CONFIG.PALETTE[0],
-          1, CONFIG.PALETTE[1], 2, CONFIG.PALETTE[2], 3, CONFIG.PALETTE[3], 5, CONFIG.PALETTE[4]
-        ],
+        'circle-color': ['step', ['to-number',['get','count']], CONFIG.PALETTE[0], 1, CONFIG.PALETTE[1], 2, CONFIG.PALETTE[2], 3, CONFIG.PALETTE[3], 5, CONFIG.PALETTE[4]],
         'circle-radius': 7, 'circle-stroke-color':'#0F1115','circle-stroke-width':1.5,'circle-opacity':0.9
       }
     });
-    map.addLayer({
-      id:L_HEAT, type:'heatmap', source:SRC,
-      paint:{
-        'heatmap-opacity':0.9,'heatmap-radius':30,'heatmap-intensity':1.1,
-        'heatmap-color': ['interpolate',['linear'],['heatmap-density'],
-          0,'rgba(0,0,0,0)', .3,'#3aa0ff', .6,'#ffd166', .8,'#ff8c42', 1,'#ff4d4d']
-      }
-    });
+    map.addLayer({ id:L_HEAT, type:'heatmap', source:SRC,
+      paint:{ 'heatmap-opacity':0.9,'heatmap-radius':30,'heatmap-intensity':1.1,
+        'heatmap-color': ['interpolate',['linear'],['heatmap-density'],0,'rgba(0,0,0,0)',.3,'#3aa0ff',.6,'#ffd166',.8,'#ff8c42',1,'#ff4d4d'] }});
     map.setLayoutProperty(L_HEAT,'visibility','none');
 
-    // cluster click -> fit leaves
     map.on('click', L_CLUSTER, e=>{
       const f=e.features?.[0]; if(!f) return;
       map.getSource(SRC).getClusterLeaves(f.properties.cluster_id, Infinity, 0, (err, leaves)=>{
         if(err||!leaves?.length) return;
-        const fc={type:'FeatureCollection',features:leaves};
-        const b=turf.bbox(fc);
+        const fc={type:'FeatureCollection',features:leaves}; const b=turf.bbox(fc);
         map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:120,maxZoom:18});
       });
     });
-
-    // point click -> popup
     map.on('click', L_POINTS, e=>{
       const f=e.features?.[0]; if(!f) return;
       const p=f.properties, [lon,lat]=f.geometry.coordinates;
@@ -248,49 +258,26 @@ function ensureLayers(){
     });
   }
 }
-
 function updateColors(){
-  // points by chosen attribute
   const attr = attrSel.value;
-  let pointExpr;
-  if(attr==='count'){
-    pointExpr = ['step',['to-number',['get','count']], CONFIG.PALETTE[0],
-      breaks[0], CONFIG.PALETTE[1], breaks[1], CONFIG.PALETTE[2], breaks[2], CONFIG.PALETTE[3], breaks[3], CONFIG.PALETTE[4]];
-  }else{
-    pointExpr = ['step',['to-number',['get',attr]], CONFIG.PALETTE[0],
-      breaks[0], CONFIG.PALETTE[1], breaks[1], CONFIG.PALETTE[2], breaks[2], CONFIG.PALETTE[3], breaks[3], CONFIG.PALETTE[4]];
-  }
+  const pointExpr = ['step',['to-number',['get',attr==='count'?'count':attr]], CONFIG.PALETTE[0],
+    breaks[0], CONFIG.PALETTE[1], breaks[1], CONFIG.PALETTE[2], breaks[2], CONFIG.PALETTE[3], breaks[3], CONFIG.PALETTE[4]];
   map.setPaintProperty(L_POINTS,'circle-color', pointExpr);
-
-  // heatmap weight
-  if(attr==='count'){
-    map.setPaintProperty(L_HEAT,'heatmap-weight', 1);
-  }else{
-    map.setPaintProperty(L_HEAT,'heatmap-weight',
-      ['interpolate',['linear'],['to-number',['get',attr]], breaks[0],0.1, breaks[3],1]);
-  }
-
-  // clusters — use count or averages for salary/experience
+  // heat weight
+  map.setPaintProperty(L_HEAT,'heatmap-weight', attr==='count' ? 1 : ['interpolate',['linear'],['to-number',['get',attr]], breaks[0],.1, breaks[3],1]);
+  // clusters color by count or averages
   let clusterValue = ['get','point_count'];
   if(attr==='salary') clusterValue = ['/', ['get','sum_salary'], ['max',1,['get','point_count']]];
   if(attr==='experience') clusterValue = ['/', ['get','sum_experience'], ['max',1,['get','point_count']]];
-
-  map.setPaintProperty(L_CLUSTER, 'circle-color', ['step', clusterValue,
-    CONFIG.PALETTE[0], breaks[0], CONFIG.PALETTE[1], breaks[1], CONFIG.PALETTE[2], breaks[2], CONFIG.PALETTE[3], breaks[3], CONFIG.PALETTE[4]
-  ]);
+  map.setPaintProperty(L_CLUSTER,'circle-color', ['step',clusterValue, CONFIG.PALETTE[0], breaks[0],CONFIG.PALETTE[1], breaks[1],CONFIG.PALETTE[2], breaks[2],CONFIG.PALETTE[3], breaks[3],CONFIG.PALETTE[4]]);
 }
-
 function setRenderer(kind){
   currentRenderer = kind;
   const show = (id,vis)=> map.getLayer(id) && map.setLayoutProperty(id,'visibility',vis?'visible':'none');
   if(kind==='clusters'){ show(L_CLUSTER,true); show(L_CLUSTER_TXT,true); show(L_POINTS,true); show(L_HEAT,false); deckOverlay.setProps({layers:[]}); }
   else if(kind==='heatmap'){ show(L_CLUSTER,false); show(L_CLUSTER_TXT,false); show(L_POINTS,false); show(L_HEAT,true); deckOverlay.setProps({layers:[]}); }
-  else { // hex grid via deck.gl
-    show(L_CLUSTER,false); show(L_CLUSTER_TXT,false); show(L_POINTS,false); show(L_HEAT,false);
-    renderHexGrid();
-  }
+  else { show(L_CLUSTER,false); show(L_CLUSTER_TXT,false); show(L_POINTS,false); show(L_HEAT,false); renderHexGrid(); }
 }
-
 function renderHexGrid(){
   if(!filtered?.features?.length){ deckOverlay.setProps({layers:[]}); return; }
   const bbox = turf.bbox(filtered);
@@ -302,15 +289,11 @@ function renderHexGrid(){
     if(inside>0){ cell.properties.count=inside; filled.push(cell); }
   });
   const fc=turf.featureCollection(filled);
-  const breaksCnt = quantiles(fc.features.map(f=>f.properties.count), CONFIG.PALETTE.length);
-
+  const br = quantiles(fc.features.map(f=>f.properties.count), CONFIG.PALETTE.length);
+  const toRGB = h=>{ const x=h.replace('#','');return [parseInt(x.slice(0,2),16),parseInt(x.slice(2,4),16),parseInt(x.slice(4,6),16)];};
   const poly = new deck.GeoJsonLayer({
     id:'hex-polys', data:fc, stroked:false, filled:true, pickable:true, opacity:.85,
-    getFillColor: f=>{
-      const v=f.properties.count;
-      const idx = v<=breaksCnt[0]?0 : v<=breaksCnt[1]?1 : v<=breaksCnt[2]?2 : v<=breaksCnt[3]?3 : 4;
-      const [r,g,b]=toRGB(CONFIG.PALETTE[idx]); return [r,g,b,220];
-    }
+    getFillColor: f=>{ const v=f.properties.count; const i=v<=br[0]?0:v<=br[1]?1:v<=br[2]?2:v<=br[3]?3:4; const [r,g,b]=toRGB(CONFIG.PALETTE[i]); return [r,g,b,220]; }
   });
   const labels = new deck.TextLayer({
     id:'hex-labels', data:fc.features.map(f=>({pos:turf.centroid(f).geometry.coordinates, t:String(f.properties.count)})),
@@ -318,7 +301,6 @@ function renderHexGrid(){
   });
   deckOverlay.setProps({layers:[poly,labels]});
 }
-
 function refresh(){
   applyFilters();
   computeBreaks();
@@ -327,16 +309,116 @@ function refresh(){
   if(currentRenderer==='hexgrid') renderHexGrid();
 }
 
-// ----- UI wiring
-tabMap.onclick = ()=>{ [tabMap,tabEO,tabVE].forEach(b=>b.classList.remove('active')); tabMap.classList.add('active'); rendererSel.value='clusters'; setRenderer('clusters'); fitTo(filtered); };
-tabEO.onclick  = ()=>{ [tabMap,tabEO,tabVE].forEach(b=>b.classList.remove('active')); tabEO.classList.add('active'); rendererSel.value='clusters'; setRenderer('clusters'); /* light EO filter if you want */ fitTo(filtered); };
-tabVE.onclick  = ()=>{ [tabMap,tabEO,tabVE].forEach(b=>b.classList.remove('active')); tabVE.classList.add('active'); rendererSel.value='hexgrid'; setRenderer('hexgrid'); fitTo(filtered); };
+// TABLE ----------
+const COLS = [
+  {k:'id', label:'ID', edit:false},
+  {k:'name', label:'Title', edit:true},
+  {k:'company', label:'Company', edit:true},
+  {k:'country', label:'Country', edit:true},
+  {k:'count', label:'Count', edit:true},
+  {k:'salary', label:'Salary', edit:true},
+  {k:'experience', label:'Exp', edit:true},
+  {k:'type', label:'Type', edit:true},
+  {k:'date', label:'Date', edit:true},
+  {k:'lat', label:'Lat', edit:true},
+  {k:'lon', label:'Lon', edit:true},
+  {k:'_del', label:'', edit:false}
+];
+function featureRows(list){
+  return list.map(f=>({
+    id:f.properties.id, name:f.properties.name||'', company:f.properties.company||'',
+    country:f.properties.country||'', count:+(f.properties.count||1)||1,
+    salary:+(f.properties.salary||0)||0, experience:+(f.properties.experience||0)||0,
+    type:f.properties.type||'', date:f.properties.date||'',
+    lat:+f.geometry.coordinates[1], lon:+f.geometry.coordinates[0]
+  }));
+}
+function currentList(){ return (tableFiltered.checked ? (filtered?.features||[]) : (raw?.features||[])); }
+function renderTable(){
+  const rows = featureRows(currentList());
+  rowCount.textContent = `(${rows.length} rows)`;
+  tblHead.innerHTML = `<tr>${COLS.map(c=>`<th>${c.label}</th>`).join('')}</tr>`;
+  tblBody.innerHTML = rows.map(r=>`<tr data-id="${r.id}">
+    ${COLS.map(c=>{
+      if(c.k==='_del') return `<td><button class="btn" data-del="${r.id}">Delete</button></td>`;
+      const val = (c.k==='salary' && r.salary) ? `€${r.salary.toLocaleString()}` :
+                  (c.k==='lat' ? (isFinite(r.lat)?r.lat.toFixed(4):'') :
+                  (c.k==='lon' ? (isFinite(r.lon)?r.lon.toFixed(4):'') : (r[c.k]??'')));
+      return `<td ${c.edit?'contenteditable="true"':''} data-key="${c.k}">${val}</td>`;
+    }).join('')}
+  </tr>`).join('');
 
+  // cell edits
+  tblBody.querySelectorAll('td[contenteditable="true"]').forEach(td=>{
+    td.addEventListener('blur', e=>{
+      const tr = td.closest('tr'); const id = +tr.dataset.id; const key = td.dataset.key;
+      const f = (raw?.features||[]).find(x=>x.properties.id===id); if(!f) return;
+      let v = td.textContent.trim();
+      if(['count','salary','experience'].includes(key)){ v = Number(String(v).replace(/[^\d.-]/g,''))||0; f.properties[key]=v; }
+      else if(key==='lat' || key==='lon'){ const num = Number(v); if(isFinite(num)){ const c=f.geometry.coordinates.slice(); f.geometry.coordinates = (key==='lat')?[c[0],num]:[num,c[1]]; } }
+      else { f.properties[key] = v; }
+      refresh();
+      renderTable();
+    });
+  });
+
+  // delete
+  tblBody.querySelectorAll('button[data-del]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const id = +btn.dataset.del;
+      raw.features = raw.features.filter(f=>f.properties.id!==id);
+      refresh(); renderTable();
+    };
+  });
+
+  // row click -> flyTo
+  tblBody.querySelectorAll('tr').forEach(tr=>{
+    tr.addEventListener('click', (e)=>{
+      if(e.target.closest('button')) return;
+      if(e.target.getAttribute('contenteditable')==='true') return;
+      const id=+tr.dataset.id; const f=(raw?.features||[]).find(x=>x.properties.id===id); if(f) map.flyTo({center:f.geometry.coordinates, zoom:10});
+    });
+  });
+}
+
+// add row
+addRowBtn.onclick = ()=>{
+  if(!raw) raw={type:'FeatureCollection',features:[]};
+  const nextId = (raw.features.reduce((m,f)=>Math.max(m, +f.properties.id||0), -1) + 1);
+  const center = map.getCenter();
+  raw.features.push({
+    type:'Feature',
+    geometry:{type:'Point', coordinates:[center.lng, center.lat]},
+    properties:{ id:nextId, name:'New Job', company:'', country:'NL', count:1, salary:0, experience:0, type:'', date:'' }
+  });
+  refresh(); renderTable();
+};
+
+// toggle drawer
+toggleTableBtn.onclick = ()=> drawer.classList.toggle('closed');
+closeDrawerBtn.onclick = ()=> drawer.classList.add('closed');
+window.addEventListener('keydown', e=>{ if(e.key.toLowerCase()==='t') drawer.classList.toggle('closed'); });
+
+// export CSV
+document.getElementById('exportCsv').onclick = ()=>{
+  const rows = featureRows(currentList());
+  const header = COLS.filter(c=>c.k!=='_del').map(c=>c.label).join(',');
+  const csvRows = rows.map(r=>[r.id,r.name,r.company,r.country,r.count,r.salary,r.experience,r.type,r.date,r.lat,r.lon]
+    .map(v=>{ const s=String(v??'').replace(/"/g,'""'); return /[",\n]/.test(s)?`"${s}"`:s; }).join(','));
+  const blob = new Blob([header+'\n'+csvRows.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='jobs.csv'; a.click(); URL.revokeObjectURL(url);
+};
+
+// UI wiring
 rendererSel.onchange = ()=> setRenderer(rendererSel.value);
 attrSel.onchange = refresh;
 classSel.onchange = refresh;
-countrySel.onchange = refresh;
-qInput.oninput = refresh;
+countrySel.onchange = ()=>{ refresh(); renderTable(); };
+qInput.oninput = ()=>{ refresh(); renderTable(); };
+
+document.getElementById('tabMap').onclick = ()=>{ ['tabMap','tabEO','tabVE'].forEach(id=>document.getElementById(id).classList.remove('active')); tabMap.classList.add('active'); rendererSel.value='clusters'; setRenderer('clusters'); fitTo(filtered); };
+document.getElementById('tabEO').onclick  = ()=>{ ['tabMap','tabEO','tabVE'].forEach(id=>document.getElementById(id).classList.remove('active')); tabEO.classList.add('active'); rendererSel.value='clusters'; setRenderer('clusters'); fitTo(filtered); };
+document.getElementById('tabVE').onclick  = ()=>{ ['tabMap','tabEO','tabVE'].forEach(id=>document.getElementById(id).classList.remove('active')); tabVE.classList.add('active'); rendererSel.value='hexgrid'; setRenderer('hexgrid'); fitTo(filtered); };
 
 fileBtn.onclick = ()=> fileInput.click();
 fileInput.onchange = (e)=>{
@@ -358,17 +440,18 @@ fileInput.onchange = (e)=>{
         const j=JSON.parse(reader.result);
         raw = j.type==='FeatureCollection'? j : {type:'FeatureCollection', features:j.features||[]};
       }
-      refresh(); fitTo(filtered);
+      refresh(); renderTable(); fitTo(filtered);
     }catch(err){ alert('Failed to load: '+err.message); }
   };
   reader.readAsText(f);
 };
 
-// ----- bootstrap
+// bootstrap
 map.on('load', ()=>{
   ensureLayers();
-  raw = sampleData();       // <-- example data loaded by default
+  raw = sampleData();           // example data
   refresh();
+  renderTable();                // show table immediately
   fitTo(filtered);
 });
 </script>
