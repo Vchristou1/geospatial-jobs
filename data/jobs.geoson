@@ -1,0 +1,42 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [4.9041, 52.3676] }, "properties": { "id": 1, "name": "SAP Consultant", "company": "Acme BV", "country": "NL", "count": 42, "salary": 78000, "experience": 3 } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [4.4792, 51.9225] }, "properties": { "id": 2, "name": "Data Engineer", "company": "Delta Tech", "country": "NL", "count": 35, "salary": 82000, "experience": 4 } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [5.1214, 52.0907] }, "properties": { "id": 3, "name": "SAP Developer", "company": "Utrecht Labs", "country": "NL", "count": 27, "salary": 73000, "experience": 2 } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [5.4697, 51.4416] }, "properties": { "id": 4, "name": "BI Analyst", "company": "Brainport Analytics", "country": "NL", "count": 18, "salary": 65000, "experience": 2 } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [6.5665, 53.2194] }, "properties": { "id": 5, "name": "SAP Architect", "company": "North BV", "country": "NL", "count": 10, "salary": 95000, "experience": 6 } },
+
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [4.3517, 50.8503] }, "properties": { "id": 6, "name": "Remote Sensing Analyst", "company": "GeoSense", "country": "BE", "count": 21, "salary": 72000, "experience": 3 } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [4.4025, 51.2194] }, "properties": { "id": 7, "name": "GIS Engineer", "company": "Flanders Geo", "country": "BE", "count": 12, "salary": 68000, "experience": 2 } },
+
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [13.405, 52.52] }, "properties": { "id": 8, "name": "SAP Consultant", "company": "Berlin Consult", "country": "DE", "count": 54, "salary": 88000, "experience": 5 } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [11.582, 48.1351] }, "properties": { "id": 9, "name": "Data Engineer", "company": "Isar Data", "country": "DE", "count": 33, "salary": 90000, "experience": 4 } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [9.9937, 53.5511] }, "properties": { "id": 10, "name": "SAP Basis Admin", "company": "PortTech", "country": "DE", "count": 16, "salary": 84000, "experience": 4 } },
+
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [2.3522, 48.8566] }, "properties": { "id": 11, "name": "BI Analyst", "company": "Seine Insights", "country": "FR", "count": 28, "salary": 70000, "experience": 3 } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [4.8357, 45.764] }, "properties": { "id": 12, "name": "SAP Developer", "company": "Rhone Systems", "country": "FR", "count": 11, "salary": 72000, "experience": 2 } },
+
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [-0.1276, 51.5074] }, "properties": { "id": 13, "name": "Data Engineer", "company": "Thames Data", "country": "UK", "count": 60, "salary": 95000, "experience": 4 } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [-2.2426, 53.4808] }, "properties": { "id": 14, "name": "GIS Specialist", "company": "Northwest Geo", "country": "UK", "count": 15, "salary": 68000, "experience": 3 } },
+
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [12.5683, 55.6761] }, "properties": { "id": 15, "name": "Remote Sensing Analyst", "company": "Øresund Space", "country": "DK", "count": 9, "salary": 76000, "experience": 3 } },
+
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [18.0686, 59.3293] }, "properties": { "id": 16, "name": "SAP Architect", "company": "Nordic ERP", "country": "SE", "count": 14, "salary": 98000, "experience": 6 } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [11.9746, 57.7089] }, "properties": { "id": 17, "name": "BI Analyst", "company": "Göta Analytics", "country": "SE", "count": 8, "salary": 72000, "experience": 2 } },
+
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [-3.7038, 40.4168] }, "properties": { "id": 18, "name": "Data Engineer", "company": "Madrid DataWorks", "country": "ES", "count": 26, "salary": 68000, "experience": 3 } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [2.1734, 41.3851] }, "properties": { "id": 19, "name": "GIS Engineer", "company": "Barna Geo", "country": "ES", "count": 13, "salary": 64000, "experience": 2 } },
+
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [9.19, 45.4642] }, "properties": { "id": 20, "name": "SAP Developer", "company": "Lombardy Tech", "country": "IT", "count": 19, "salary": 72000, "experience": 3 } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [12.4964, 41.9028] }, "properties": { "id": 21, "name": "BI Analyst", "company": "Tiber Insights", "country": "IT", "count": 12, "salary": 65000, "experience": 2 } },
+
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [21.0122, 52.2297] }, "properties": { "id": 22, "name": "SAP Consultant", "company": "Vistula ERP", "country": "PL", "count": 31, "salary": 72000, "experience": 4 } },
+
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [16.3738, 48.2082] }, "properties": { "id": 23, "name": "Remote Sensing Analyst", "company": "Danube Space", "country": "AT", "count": 7, "salary": 74000, "experience": 3 } },
+
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [8.5417, 47.3769] }, "properties": { "id": 24, "name": "Data Engineer", "company": "Zurich Data", "country": "CH", "count": 17, "salary": 110000, "experience": 5 } },
+
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [-6.2603, 53.3498] }, "properties": { "id": 25, "name": "GIS Specialist", "company": "Dublin Geo", "country": "IE", "count": 9, "salary": 70000, "experience": 3 } }
+  ]
+}
