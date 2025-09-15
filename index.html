@@ -23,7 +23,6 @@
   .btn.primary{background:var(--accent);border-color:transparent;color:white}
   .region-btn{background:var(--panel);border:1px solid var(--stroke);color:#aab1be;padding:6px 12px;border-radius:8px;cursor:pointer}
   .region-btn.active{background:var(--accent);color:#fff}
-  /* Table drawer */
   .drawer{position:fixed;left:0;right:0;bottom:0;height:42vh;background:var(--panel);border-top:1px solid var(--stroke);
           transform:translateY(0);transition:.25s;z-index:40;display:flex;flex-direction:column}
   .drawer.closed{transform:translateY(100%)}
@@ -33,8 +32,7 @@
   tbody td{border-bottom:1px solid var(--stroke);padding:.4rem .6rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   td[contenteditable="true"]{outline:1px dashed transparent}
   td[contenteditable="true"]:focus{outline:1px dashed var(--accent);background:#0c0f18}
-  /* Popup: dark text */
-  .maplibregl-popup-content{color:#0b1220;font: 13px/1.35 Inter,system-ui,Arial}
+  .maplibregl-popup-content{color:#0b1220;font:13px/1.35 Inter,system-ui,Arial}
   .legend{display:flex;height:14px;border:1px solid var(--stroke);border-radius:6px;overflow:hidden}
 </style>
 </head>
@@ -45,6 +43,11 @@
       <div class="flex gap-2">
         <button id="tabMap" class="pill active">Map Visualization</button>
         <button id="tabVE"  class="pill">Vector Enrichment jobs</button>
+      </div>
+      <!-- Clusters / Heatmap toggle -->
+      <div class="mt-2 flex gap-2">
+        <button id="modeCluster" class="pill active">Clusters</button>
+        <button id="modeHeat" class="pill">Heatmap</button>
       </div>
       <div class="mt-3 flex gap-2">
         <button id="toggleTable" class="btn primary">Toggle table (T)</button>
@@ -61,14 +64,16 @@
       <div class="grid grid-cols-2 gap-2">
         <div>
           <label class="text-xs text-slate-400">Salary min</label>
-          <input id="salaryMin" type="number" class="w-full bg-transparent border border-[color:var(--stroke)] rounded-md px-2 py-1" />
+          <input id="salaryMin" type="number" class="w-full bg-transparent border border-[color:var(--stroke)] rounded-md px-2 py-1"/>
         </div>
         <div>
           <label class="text-xs text-slate-400">Salary max</label>
-          <input id="salaryMax" type="number" class="w-full bg-transparent border border-[color:var(--stroke)] rounded-md px-2 py-1" />
+          <input id="salaryMax" type="number" class="w-full bg-transparent border border-[color:var(--stroke)] rounded-md px-2 py-1"/>
         </div>
       </div>
-      <label class="mt-1 inline-flex items-center gap-2 text-xs"><input id="salaryIncludeEmpty" type="checkbox" class="accent-indigo-500" checked/>Include jobs without salary</label>
+      <label class="mt-1 inline-flex items-center gap-2 text-xs">
+        <input id="salaryIncludeEmpty" type="checkbox" class="accent-indigo-500" checked/>Include jobs without salary
+      </label>
 
       <div class="mt-3">
         <label class="text-xs text-slate-400">Date posted ≤ (days)</label>
@@ -132,56 +137,41 @@
 
 <script>
 const CONFIG = {
-  STYLE: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
-  PALETTE: ['#6C1D6B','#9C2C7A','#D4475D','#F07E2E','#FFA600'],
-  CLUSTER_RADIUS: 60,
-  CLUSTER_MAX_ZOOM: 14
+  STYLE:'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+  PALETTE:['#6C1D6B','#9C2C7A','#D4475D','#F07E2E','#FFA600'],
+  CLUSTER_RADIUS:60,
+  CLUSTER_MAX_ZOOM:14
 };
 
 const map = new maplibregl.Map({ container:'map', style:CONFIG.STYLE, center:[5.3,52.2], zoom:6.2 });
 const deckOverlay = new deck.MapboxOverlay({ interleaved:true, layers:[] });
 map.addControl(deckOverlay);
 
-// --- Demo region polygons (very simplified provinces just for aggregation demo)
-const NL_REGIONS = {
+// Province polygons (load real file; fallback if missing)
+const REGIONS_URL = 'data/nl_provinces_simplified.geojson';
+let NL_REGIONS = null;
+const PROVINCE_FALLBACK = {
   type:'FeatureCollection', features:[
-    turf.bboxPolygon([3.3,52.2,5.5,53.7], {properties:{name:'Noord-Holland'}}), // rough!
-    turf.bboxPolygon([4.0,51.7,5.8,52.4], {properties:{name:'Utrecht & Zuid-Holland mix'}}),
+    turf.bboxPolygon([3.3,52.2,5.5,53.7], {properties:{name:'Noord-Holland'}}),
+    turf.bboxPolygon([4.0,51.7,5.8,52.4], {properties:{name:'Zuid-Holland/Utrecht (rough)'}}),
     turf.bboxPolygon([5.0,51.2,6.1,51.8], {properties:{name:'Noord-Brabant'}})
   ]
 };
 
-// UI refs
-const tabMap = document.getElementById('tabMap');
-const tabVE  = document.getElementById('tabVE');
-const toggleTableBtn = document.getElementById('toggleTable');
-const closeDrawerBtn = document.getElementById('closeDrawer');
-const addRowBtn = document.getElementById('addRow');
-const fileBtn = document.getElementById('btnImport');
-const fileInput = document.getElementById('fileInput');
-
-const salaryMin = document.getElementById('salaryMin');
-const salaryMax = document.getElementById('salaryMax');
-const salaryIncludeEmpty = document.getElementById('salaryIncludeEmpty');
-const daysSince = document.getElementById('daysSince');
-const jtRemote = document.getElementById('jtRemote');
-const jtHybrid = document.getElementById('jtHybrid');
-const jtOnsite = document.getElementById('jtOnsite');
-const notApplied = document.getElementById('notApplied');
-const qInput = document.getElementById('q');
-
-const legend = document.getElementById('legend');
-const lgLow = document.getElementById('lgLow'), lgHigh = document.getElementById('lgHigh');
-const drawer = document.getElementById('drawer');
-const tableFiltered = document.getElementById('tableFiltered');
-const tblHead = document.getElementById('tbl').querySelector('thead');
-const tblBody = document.getElementById('tbl').querySelector('tbody');
-const rowCount = document.getElementById('rowCount');
+// UI
+const tabMap=document.getElementById('tabMap'), tabVE=document.getElementById('tabVE');
+const modeCluster=document.getElementById('modeCluster'), modeHeat=document.getElementById('modeHeat');
+const toggleTableBtn=document.getElementById('toggleTable'), closeDrawerBtn=document.getElementById('closeDrawer'), drawer=document.getElementById('drawer');
+const addRowBtn=document.getElementById('addRow'), fileBtn=document.getElementById('btnImport'), fileInput=document.getElementById('fileInput');
+const salaryMin=document.getElementById('salaryMin'), salaryMax=document.getElementById('salaryMax'), salaryIncludeEmpty=document.getElementById('salaryIncludeEmpty');
+const daysSince=document.getElementById('daysSince'), jtRemote=document.getElementById('jtRemote'), jtHybrid=document.getElementById('jtHybrid'), jtOnsite=document.getElementById('jtOnsite');
+const notApplied=document.getElementById('notApplied'), qInput=document.getElementById('q');
+const legend=document.getElementById('legend'), lgLow=document.getElementById('lgLow'), lgHigh=document.getElementById('lgHigh');
+const tableFiltered=document.getElementById('tableFiltered'), tblHead=document.getElementById('tbl').querySelector('thead'), tblBody=document.getElementById('tbl').querySelector('tbody'), rowCount=document.getElementById('rowCount');
 
 // Data
 let raw=null, filtered=null, currentRenderer='clusters', salaryRange=[0,0];
 
-// Sample data (NL only)
 function sampleData(){
   const rows = [
     {lon:4.8945,lat:52.3667,company:'Leaseweb', job:'SAP Functional Application Manager', salary:89582, experience:2, type:'Hybrid', date:'2025-03-03', applied:'No'},
@@ -199,10 +189,7 @@ function sampleData(){
 }
 
 // Helpers
-const quantiles = (arr,k)=>{ const a=[...arr].sort((x,y)=>x-y), q=[]; if(a.length===0) return q;
-  for(let i=1;i<k;i++){ const p=i/k, idx=(a.length-1)*p, lo=Math.floor(idx), hi=Math.ceil(idx);
-    q.push(lo===hi?a[lo]:a[lo]+(a[hi]-a[lo])*(idx-lo)); } return q; };
-
+const quantiles=(arr,k)=>{ const a=[...arr].sort((x,y)=>x-y), q=[]; if(!a.length) return q; for(let i=1;i<k;i++){ const p=i/k, idx=(a.length-1)*p, lo=Math.floor(idx), hi=Math.ceil(idx); q.push(lo===hi?a[lo]:a[lo]+(a[hi]-a[lo])*(idx-lo)); } return q; };
 function computeSalaryRange(){
   const vals = raw.features.map(f=>+f.properties.salary).filter(v=>isFinite(v)&&v>0);
   const min = vals.length?Math.min(...vals):0;
@@ -210,107 +197,77 @@ function computeSalaryRange(){
   salaryRange=[min,max];
   salaryMin.value=min||0; salaryMax.value=max||0;
 }
-
-function withinDays(dateStr, maxDays){
-  if(!maxDays || !/^\d+$/.test(String(maxDays))) return true;
-  const d = new Date(dateStr); if(isNaN(+d)) return false;
-  const diffDays = (Date.now() - d.getTime())/(1000*60*60*24);
-  return diffDays <= maxDays + 1e-9;
-}
+function withinDays(dateStr,maxDays){ if(!maxDays || !/^\d+$/.test(String(maxDays))) return true; const d=new Date(dateStr); if(isNaN(+d)) return false; const diffDays=(Date.now()-d.getTime())/(1000*60*60*24); return diffDays<=maxDays+1e-9; }
 
 function applyFilters(){
   const q = qInput.value.trim().toLowerCase();
   const typesWanted = new Set([jtRemote.checked&&'Remote', jtHybrid.checked&&'Hybrid', jtOnsite.checked&&'On-site'].filter(Boolean));
-  const salMin = Number(salaryMin.value)||0;
-  const salMax = Number(salaryMax.value)||Number.MAX_SAFE_INTEGER;
-  const includeEmpty = salaryIncludeEmpty.checked;
-  const maxDays = daysSince.value?parseInt(daysSince.value,10):null;
+  const salMin=Number(salaryMin.value)||0, salMax=Number(salaryMax.value)||Number.MAX_SAFE_INTEGER, includeEmpty=salaryIncludeEmpty.checked;
+  const maxDays=daysSince.value?parseInt(daysSince.value,10):null;
 
-  filtered = { type:'FeatureCollection', features: (raw?.features||[]).filter(f=>{
-    // country locked to NL
+  filtered = { type:'FeatureCollection', features:(raw?.features||[]).filter(f=>{
     if(f.properties.country!=='NL') return false;
-    // text
-    const txt = `${f.properties.name} ${f.properties.company}`.toLowerCase();
+    const txt=`${f.properties.name} ${f.properties.company}`.toLowerCase();
     if(q && !txt.includes(q)) return false;
-    // type
     if(typesWanted.size && !typesWanted.has(f.properties.type)) return false;
-    // applied
     if(notApplied.checked && String(f.properties.applied).toLowerCase()==='yes') return false;
-    // salary
-    const s = Number(f.properties.salary);
-    if(isFinite(s) && s>0){
-      if(s<salMin || s>salMax) return false;
-    }else if(!includeEmpty){
-      return false;
-    }
-    // date posted
+    const s=Number(f.properties.salary);
+    if(isFinite(s) && s>0){ if(s<salMin || s>salMax) return false; } else if(!includeEmpty){ return false; }
     if(!withinDays(f.properties.date, maxDays)) return false;
-
     return true;
   })};
 }
-
 function fitTo(fc){ if(!fc.features.length) return; const b=turf.bbox(fc); map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:100}); }
 
-// Map sources/layers
+// Map layers
 const SRC='jobs', L_CLUSTER='cluster-circles', L_CLUSTER_TXT='cluster-text', L_POINTS='points', L_HEAT='heat';
-
 function ensureLayers(){
   if(map.getSource(SRC)) return;
-  map.addSource(SRC, {
-    type:'geojson',
-    data:{type:'FeatureCollection',features:[]},
-    cluster:true, clusterRadius:CONFIG.CLUSTER_RADIUS, clusterMaxZoom:CONFIG.CLUSTER_MAX_ZOOM
-  });
+  map.addSource(SRC,{ type:'geojson', data:{type:'FeatureCollection',features:[]}, cluster:true, clusterRadius:CONFIG.CLUSTER_RADIUS, clusterMaxZoom:CONFIG.CLUSTER_MAX_ZOOM });
 
   map.addLayer({
     id:L_CLUSTER, type:'circle', source:SRC, filter:['has','point_count'],
     paint:{
-      'circle-color': CONFIG.PALETTE[2], // temporary; updated dynamically
+      'circle-color': CONFIG.PALETTE[2], // set by recolorClusters()
       'circle-radius': ['interpolate',['linear'],['get','point_count'],1,14,100,34],
       'circle-stroke-color':'#0F1115','circle-stroke-width':2,'circle-opacity':0.95
     }
   });
-  map.addLayer({
-    id:L_CLUSTER_TXT, type:'symbol', source:SRC, filter:['has','point_count'],
-    layout:{'text-field':['to-string',['get','point_count']],'text-size':12}, paint:{'text-color':'#fff'}
-  });
+  map.addLayer({ id:L_CLUSTER_TXT, type:'symbol', source:SRC, filter:['has','point_count'],
+    layout:{'text-field':['to-string',['get','point_count']],'text-size':12}, paint:{'text-color':'#fff'} });
+
   map.addLayer({
     id:L_POINTS, type:'circle', source:SRC, filter:['!', ['has','point_count']],
-    paint:{
-      'circle-color':'#a855f7', // fixed magenta point
-      'circle-radius':7,'circle-stroke-color':'#0F1115','circle-stroke-width':1.5,'circle-opacity':0.95
-    }
+    paint:{ 'circle-color':'#a855f7','circle-radius':7,'circle-stroke-color':'#0F1115','circle-stroke-width':1.5,'circle-opacity':0.95 }
   });
+
+  // STRONG heatmap so it's visible with small datasets
   map.addLayer({
     id:L_HEAT, type:'heatmap', source:SRC,
     paint:{
-      'heatmap-opacity':0.9,
-      'heatmap-radius': ['interpolate',['linear'],['zoom'],5,20,9,40],
-      'heatmap-intensity': ['interpolate',['linear'],['zoom'],5,0.8,9,1.2],
-      // pure density → peaks where more jobs are
-      'heatmap-weight': 1,
+      'heatmap-radius': ['interpolate',['linear'],['zoom'],5,35,9,70],
+      'heatmap-intensity': ['interpolate',['linear'],['zoom'],5,1.2,9,2.1],
+      'heatmap-weight': 1, // pure density (counts)
       'heatmap-color': ['interpolate',['linear'],['heatmap-density'],
-        0,'rgba(0,0,0,0)', .3,'#3aa0ff', .6,'#ffd166', .8,'#ff8c42', 1,'#ff4d4d']
+        0,'rgba(0,0,0,0)', 0.25,'#3aa0ff', 0.55,'#ffd166', 0.8,'#ff8c42', 1,'#ff4d4d'],
+      'heatmap-opacity':0.9
     }
   });
   map.setLayoutProperty(L_HEAT,'visibility','none');
 
-  // cluster click → zoom so all leaves are visible
   map.on('click', L_CLUSTER, e=>{
     const f=e.features?.[0]; if(!f) return;
-    map.getSource(SRC).getClusterLeaves(f.properties.cluster_id, Infinity, 0, (err, leaves)=>{
+    map.getSource(SRC).getClusterLeaves(f.properties.cluster_id, Infinity, 0, (err,leaves)=>{
       if(err||!leaves?.length) return;
       const fc={type:'FeatureCollection',features:leaves}; const b=turf.bbox(fc);
       map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:120,maxZoom:18});
     });
   });
 
-  // point click → popup; if other jobs share same coords, show them all
   map.on('click', L_POINTS, e=>{
     const f=e.features?.[0]; if(!f) return;
     const [lon,lat]=f.geometry.coordinates;
-    const same = (raw?.features||[]).filter(x=>{
+    const same=(raw?.features||[]).filter(x=>{
       const [xlon,xlat]=x.geometry.coordinates;
       return Math.abs(xlon-lon)<1e-5 && Math.abs(xlat-lat)<1e-5;
     }).map(x=>x.properties);
@@ -318,14 +275,11 @@ function ensureLayers(){
     let html='';
     if(same.length>1){
       html = `<div class="font-semibold mb-1">Jobs at this location (${same.length})</div>
-              <table style="width:100%;border-collapse:collapse;font-size:12px">
-                <thead><tr><th style="text-align:left">Title</th><th>Company</th><th>Type</th><th>Salary</th><th>Date</th></tr></thead>
-                <tbody>${same.map(p=>`
-                  <tr>
-                    <td>${p.name}</td><td>${p.company}</td><td>${p.type||''}</td>
-                    <td>${p.salary?('€'+(+p.salary).toLocaleString()):'-'}</td><td>${p.date||''}</td>
-                  </tr>`).join('')}</tbody></table>
-              <div style="color:#6b7280;margin-top:4px;font-size:11px">${lat.toFixed(4)}, ${lon.toFixed(4)}</div>`;
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr><th style="text-align:left">Title</th><th>Company</th><th>Type</th><th>Salary</th><th>Date</th></tr></thead>
+        <tbody>${same.map(p=>`<tr><td>${p.name}</td><td>${p.company}</td><td>${p.type||''}</td><td>${p.salary?('€'+(+p.salary).toLocaleString()):'-'}</td><td>${p.date||''}</td></tr>`).join('')}</tbody>
+      </table>
+      <div style="color:#6b7280;margin-top:4px;font-size:11px">${lat.toFixed(4)}, ${lon.toFixed(4)}</div>`;
     }else{
       const p=f.properties;
       html = `<div style="min-width:240px">
@@ -340,12 +294,12 @@ function ensureLayers(){
   });
 }
 
-// Dynamic cluster color scale based on visible clusters
+// Dynamic cluster palette from visible counts
 function recolorClusters(){
   const feats = map.queryRenderedFeatures({layers:[L_CLUSTER]});
   const counts = feats.map(f=>f.properties.point_count).filter(v=>isFinite(v));
   if(!counts.length) return;
-  const br = quantiles(counts, CONFIG.PALETTE.length); // 4 breaks
+  const br = quantiles(counts, CONFIG.PALETTE.length);
   legend.innerHTML = CONFIG.PALETTE.map(c=>`<div style="flex:1;background:${c}"></div>`).join('');
   lgLow.textContent = Math.min(...counts); lgHigh.textContent = Math.max(...counts);
   map.setPaintProperty(L_CLUSTER,'circle-color',
@@ -362,23 +316,27 @@ function recolorClusters(){
 function setRenderer(kind){
   currentRenderer = kind;
   const show = (id,vis)=> map.getLayer(id) && map.setLayoutProperty(id,'visibility',vis?'visible':'none');
-  if(kind==='clusters'){ show(L_CLUSTER,true); show(L_CLUSTER_TXT,true); show(L_POINTS,true); show(L_HEAT,false); deckOverlay.setProps({layers:[]}); }
+  if(kind==='clusters'){ show(L_CLUSTER,true); show(L_CLUSTER_TXT,true); show(L_POINTS,true); show(L_HEAT,false); deckOverlay.setProps({layers:[]}); recolorClusters(); }
   else if(kind==='heatmap'){ show(L_CLUSTER,false); show(L_CLUSTER_TXT,false); show(L_POINTS,false); show(L_HEAT,true); deckOverlay.setProps({layers:[]}); }
-  else { // region aggregation (vector enrichment)
+  else { // vector enrichment
     show(L_CLUSTER,false); show(L_CLUSTER_TXT,false); show(L_POINTS,false); show(L_HEAT,false);
     renderRegionAggregation();
   }
 }
 
-// Aggregate jobs by regions (demo polygons)
+// Province aggregation
 function renderRegionAggregation(){
-  if(!filtered?.features?.length){ deckOverlay.setProps({layers:[]}); return; }
-  // count per region
-  const counted = NL_REGIONS.features.map(cell=>{
-    const cnt = filtered.features.filter(pt=>turf.booleanPointInPolygon(pt, cell)).length;
-    if(cnt>0) cell.properties.count = cnt;
-    return cnt>0?cell:null;
+  const REG = NL_REGIONS?.features?.length ? NL_REGIONS : PROVINCE_FALLBACK;
+  if(!filtered?.features?.length || !REG?.features?.length){ deckOverlay.setProps({layers:[]}); return; }
+
+  const counted = REG.features.map(cell=>{
+    const pts = filtered.features.filter(pt => turf.booleanPointInPolygon(pt, cell));
+    if(pts.length>0){ return { ...cell, properties:{ ...(cell.properties||{}), count:pts.length } }; }
+    return null;
   }).filter(Boolean);
+
+  if(!counted.length){ deckOverlay.setProps({layers:[]}); return; }
+
   const fc = {type:'FeatureCollection', features:counted};
   const br = quantiles(fc.features.map(f=>f.properties.count), CONFIG.PALETTE.length);
   const toRGB = h=>{ const x=h.replace('#','');return [parseInt(x.slice(0,2),16),parseInt(x.slice(2,4),16),parseInt(x.slice(4,6),16)];};
@@ -386,38 +344,39 @@ function renderRegionAggregation(){
   const poly = new deck.GeoJsonLayer({
     id:'regions', data:fc, stroked:true, filled:true, pickable:true, opacity:.85,
     getLineColor:[20,24,36,200], getLineWidth:2,
-    getFillColor: f=>{ const v=f.properties.count; const i=v<= (br[0]??v) ?0 : v<= (br[1]??v)?1 : v<= (br[2]??v)?2 : v<= (br[3]??v)?3 : 4;
-      const [r,g,b]=toRGB(CONFIG.PALETTE[i]); return [r,g,b,220];}
+    getFillColor:f=>{ const v=f.properties.count; const i=v<= (br[0]??v)?0 : v<= (br[1]??v)?1 : v<= (br[2]??v)?2 : v<= (br[3]??v)?3 : 4; const [r,g,b]=toRGB(CONFIG.PALETTE[i]); return [r,g,b,220]; }
   });
+
   const labels = new deck.TextLayer({
-    id:'region-labels', data:fc.features.map(f=>({pos:turf.centroid(f).geometry.coordinates, t:`${f.properties.name}: ${f.properties.count}`})),
+    id:'region-labels',
+    data: fc.features.map(f=>({ pos:turf.centerOfMass(f).geometry.coordinates, t:`${(f.properties.name||'Region')}: ${f.properties.count}`})),
     getPosition:d=>d.pos, getText:d=>d.t, getSize:14, getColor:[255,255,255,255], getTextAnchor:'middle', getAlignmentBaseline:'center'
   });
+
   deckOverlay.setProps({layers:[poly,labels]});
 }
 
-// Refresh map data
+// Refresh
 function refresh(){
   applyFilters();
   map.getSource(SRC)?.setData(filtered);
-  if(currentRenderer==='hexgrid' /* not used now */){} 
   if(currentRenderer==='clusters') recolorClusters();
   if(currentRenderer==='vector') renderRegionAggregation();
 }
 
-// TABLE ----------
-const COLS = [
-  {k:'id', label:'ID', edit:false},
-  {k:'name', label:'Title', edit:true},
-  {k:'company', label:'Company', edit:true},
-  {k:'salary', label:'Salary', edit:true},
-  {k:'experience', label:'Exp', edit:true},
-  {k:'type', label:'Type', edit:true},
-  {k:'date', label:'Date', edit:true},
-  {k:'applied', label:'Applied', edit:true},
-  {k:'lat', label:'Lat', edit:true},
-  {k:'lon', label:'Lon', edit:true},
-  {k:'_del', label:'', edit:false}
+// TABLE
+const COLS=[
+  {k:'id',label:'ID',edit:false},
+  {k:'name',label:'Title',edit:true},
+  {k:'company',label:'Company',edit:true},
+  {k:'salary',label:'Salary',edit:true},
+  {k:'experience',label:'Exp',edit:true},
+  {k:'type',label:'Type',edit:true},
+  {k:'date',label:'Date',edit:true},
+  {k:'applied',label:'Applied',edit:true},
+  {k:'lat',label:'Lat',edit:true},
+  {k:'lon',label:'Lon',edit:true},
+  {k:'_del',label:'',edit:false}
 ];
 function featureRows(list){
   return list.map(f=>({
@@ -429,37 +388,32 @@ function featureRows(list){
 }
 function currentList(){ return (tableFiltered.checked ? (filtered?.features||[]) : (raw?.features||[])); }
 function renderTable(){
-  const rows = featureRows(currentList());
-  rowCount.textContent = `(${rows.length} rows)`;
-  tblHead.innerHTML = `<tr>${COLS.map(c=>`<th>${c.label}</th>`).join('')}</tr>`;
-  tblBody.innerHTML = rows.map(r=>`<tr data-id="${r.id}">
+  const rows=featureRows(currentList());
+  rowCount.textContent=`(${rows.length} rows)`;
+  tblHead.innerHTML=`<tr>${COLS.map(c=>`<th>${c.label}</th>`).join('')}</tr>`;
+  tblBody.innerHTML=rows.map(r=>`<tr data-id="${r.id}">
     ${COLS.map(c=>{
       if(c.k==='_del') return `<td><button class="btn" data-del="${r.id}">Delete</button></td>`;
-      const val = (c.k==='salary' && r.salary) ? `€${r.salary.toLocaleString()}` :
-                  (c.k==='lat' ? (isFinite(r.lat)?r.lat.toFixed(4):'') :
-                  (c.k==='lon' ? (isFinite(r.lon)?r.lon.toFixed(4):'') : (r[c.k]??'')));
+      const val=(c.k==='salary'&&r.salary)?`€${r.salary.toLocaleString()}`:(c.k==='lat'?(isFinite(r.lat)?r.lat.toFixed(4):''):(c.k==='lon'?(isFinite(r.lon)?r.lon.toFixed(4):''):(r[c.k]??'')));
       return `<td ${c.edit?'contenteditable="true"':''} data-key="${c.k}">${val}</td>`;
     }).join('')}
   </tr>`).join('');
 
-  // edits
   tblBody.querySelectorAll('td[contenteditable="true"]').forEach(td=>{
     td.addEventListener('blur', ()=>{
-      const tr = td.closest('tr'); const id = +tr.dataset.id; const key = td.dataset.key;
-      const f = (raw?.features||[]).find(x=>x.properties.id===id); if(!f) return;
-      let v = td.textContent.trim();
-      if(['salary','experience'].includes(key)){ v = Number(String(v).replace(/[^\d.-]/g,''))||0; f.properties[key]=v; }
+      const tr=td.closest('tr'); const id=+tr.dataset.id; const key=td.dataset.key;
+      const f=(raw?.features||[]).find(x=>x.properties.id===id); if(!f) return;
+      let v=td.textContent.trim();
+      if(['salary','experience'].includes(key)){ v=Number(String(v).replace(/[^\d.-]/g,''))||0; f.properties[key]=v; }
       else if(key==='lat'||key==='lon'){ const num=Number(v); if(isFinite(num)){ const c=f.geometry.coordinates.slice(); f.geometry.coordinates=(key==='lat')?[c[0],num]:[num,c[1]]; } }
-      else if(key==='applied'){ f.properties.applied = (v.toLowerCase().startsWith('y')?'Yes':'No'); }
+      else if(key==='applied'){ f.properties.applied=(v.toLowerCase().startsWith('y')?'Yes':'No'); }
       else { f.properties[key]=v; }
       refresh(); renderTable();
     });
   });
-  // delete
   tblBody.querySelectorAll('button[data-del]').forEach(btn=>{
-    btn.onclick = ()=>{ const id=+btn.dataset.del; raw.features = raw.features.filter(f=>f.properties.id!==id); refresh(); renderTable(); };
+    btn.onclick=()=>{ const id=+btn.dataset.del; raw.features=raw.features.filter(f=>f.properties.id!==id); refresh(); renderTable(); };
   });
-  // click row → fly
   tblBody.querySelectorAll('tr').forEach(tr=>{
     tr.addEventListener('click', e=>{
       if(e.target.closest('button')) return;
@@ -469,7 +423,7 @@ function renderTable(){
   });
 }
 
-// UI wiring
+// Wiring
 document.querySelectorAll('.region-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     document.querySelectorAll('.region-btn').forEach(b=>b.classList.remove('active'));
@@ -481,71 +435,70 @@ document.querySelectorAll('.region-btn').forEach(btn=>{
   });
 });
 
-tabMap.onclick = ()=>{ tabMap.classList.add('active'); tabVE.classList.remove('active'); setRenderer('clusters'); fitTo(filtered); };
+tabMap.onclick = ()=>{ tabMap.classList.add('active'); tabVE.classList.remove('active'); setRenderer(modeHeat.classList.contains('active')?'heatmap':'clusters'); fitTo(filtered); };
 tabVE.onclick  = ()=>{ tabVE.classList.add('active'); tabMap.classList.remove('active'); setRenderer('vector'); fitTo(filtered); };
+
+modeCluster.onclick = ()=>{ modeCluster.classList.add('active'); modeHeat.classList.remove('active'); setRenderer('clusters'); recolorClusters(); };
+modeHeat.onclick    = ()=>{ modeHeat.classList.add('active'); modeCluster.classList.remove('active'); setRenderer('heatmap'); };
 
 ['input','change'].forEach(ev=>{
   [salaryMin,salaryMax,salaryIncludeEmpty,daysSince,jtRemote,jtHybrid,jtOnsite,notApplied,qInput]
     .forEach(el=>el.addEventListener(ev,()=>{ refresh(); renderTable(); }));
 });
 
-toggleTableBtn.onclick = ()=> drawer.classList.toggle('closed');
-closeDrawerBtn.onclick = ()=> drawer.classList.add('closed');
-window.addEventListener('keydown', e=>{ if(e.key.toLowerCase()==='t') drawer.classList.toggle('closed'); });
+toggleTableBtn.onclick=()=>drawer.classList.toggle('closed');
+closeDrawerBtn.onclick=()=>drawer.classList.add('closed');
+window.addEventListener('keydown',e=>{ if(e.key.toLowerCase()==='t') drawer.classList.toggle('closed'); });
 
-// Import
-fileBtn.onclick = ()=> fileInput.click();
-fileInput.onchange = (e)=>{
+fileBtn.onclick=()=>fileInput.click();
+fileInput.onchange=(e)=>{
   const f=e.target.files?.[0]; if(!f) return;
   const reader=new FileReader();
   reader.onload=()=>{
     try{
       if(f.name.toLowerCase().endsWith('.csv')){
-        const parsed=Papa.parse(reader.result,{header:true, dynamicTyping:true, skipEmptyLines:true});
-        const header = Object.keys(parsed.data[0]||{}).reduce((m,k)=>{m[k.toLowerCase()]=k;return m;},{});
+        const parsed=Papa.parse(reader.result,{header:true,dynamicTyping:true,skipEmptyLines:true});
+        const header=Object.keys(parsed.data[0]||{}).reduce((m,k)=>{m[k.toLowerCase()]=k;return m;},{});
         const lonK=header.lon||header.longitude||header.lng, latK=header.lat||header.latitude;
-        raw={type:'FeatureCollection', features: parsed.data.map((r,i)=>{
+        raw={type:'FeatureCollection',features:parsed.data.map((r,i)=>{
           const lon=+r[lonK], lat=+r[latK]; if(!isFinite(lon)||!isFinite(lat)) return null;
           return {type:'Feature',geometry:{type:'Point',coordinates:[lon,lat]},
-            properties:{ id:i, country:'NL', name:r.title||r.role||'Job', company:r.company||'',
-              salary:+(r.salary||0)||0, experience:+(r.experience||0)||0, type:r.type||'', date:r.date||'', applied:r.applied||'No' }};
+            properties:{id:i,country:'NL',name:r.title||r.role||'Job',company:r.company||'',
+              salary:+(r.salary||0)||0,experience:+(r.experience||0)||0,type:r.type||'',date:r.date||'',applied:r.applied||'No'}};
         }).filter(Boolean)};
       }else{
         const j=JSON.parse(reader.result);
-        raw = j.type==='FeatureCollection'? j : {type:'FeatureCollection', features:j.features||[]};
-        // force NL & applied default
+        raw = j.type==='FeatureCollection'? j : {type:'FeatureCollection',features:j.features||[]};
         raw.features.forEach((f,i)=>{ f.properties.country='NL'; f.properties.applied=f.properties.applied||'No'; f.properties.id=(f.properties.id??i); });
       }
-      computeSalaryRange();
-      refresh(); renderTable(); fitTo(filtered);
+      computeSalaryRange(); refresh(); renderTable(); fitTo(filtered);
     }catch(err){ alert('Failed to load: '+err.message); }
   };
   reader.readAsText(f);
 };
 
-// Add row
-addRowBtn.onclick = ()=>{
+addRowBtn.onclick=()=>{
   if(!raw) raw={type:'FeatureCollection',features:[]};
-  const nextId = raw.features.reduce((m,f)=>Math.max(m, +f.properties.id||0), -1) + 1;
-  const c = map.getCenter();
-  raw.features.push({ type:'Feature', geometry:{type:'Point', coordinates:[c.lng,c.lat]},
-    properties:{ id:nextId, country:'NL', name:'New Job', company:'', salary:0, experience:0, type:'Hybrid', date:'', applied:'No' }});
+  const nextId = raw.features.reduce((m,f)=>Math.max(m,+f.properties.id||0),-1)+1;
+  const c=map.getCenter();
+  raw.features.push({type:'Feature',geometry:{type:'Point',coordinates:[c.lng,c.lat]},
+    properties:{id:nextId,country:'NL',name:'New Job',company:'',salary:0,experience:0,type:'Hybrid',date:'',applied:'No'}});
   computeSalaryRange(); refresh(); renderTable();
 };
 
 // Bootstrap
-map.on('load', ()=>{
+map.on('load', async ()=>{
   ensureLayers();
+  // try load real provinces
+  try{ const res=await fetch(REGIONS_URL,{cache:'no-store'}); if(res.ok) NL_REGIONS=await res.json(); }catch(e){ console.warn('Province file not found, using fallback.', e); }
   raw = sampleData();
-  computeSalaryRange();
-  applyFilters();
+  computeSalaryRange(); applyFilters();
   map.getSource(SRC).setData(filtered);
   recolorClusters();
   renderTable();
   fitTo(filtered);
 });
-
-// Recompute cluster color scale when the map view changes
+// recolor when viewport changes
 map.on('moveend', ()=>{ if(currentRenderer==='clusters') recolorClusters(); });
 </script>
 </body>
